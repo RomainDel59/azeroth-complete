@@ -26,16 +26,19 @@ local WORLD_MAP = 947
 -- Zone cards
 -------------------------------------------------------------------------------
 
--- Artwork of a zone or a category: the zone map, or the loading screen chosen by the data
--- for a zone without a map, or the icon of a category; a zone that has none of them shows
--- its continent, darkened.
+-- Artwork of a zone or a category: the map or the picture chosen by the data (a loading
+-- screen for a zone without a map, a talent background for a class); a zone that has none
+-- of them shows its continent, darkened.
 local function ShowGroupArt(art, group)
     if group.art and group.art ~= 0 then
-        if art:SetFile(group.art) then return end
+        if group.artRatio then
+            if art:SetFile(group.art, group.artRatio) then return end
+        elseif art:SetLoadingScreen(group.art, group.artFramed) then
+            return
+        end
     elseif group.art == nil and group.uiMap and art:SetMap(group.uiMap) then
         return
     end
-    if group.icon and art:SetIcon(Theme.icons[group.icon]) then return end
     if group.kind == "zone" and group.continent ~= Continent.CATEGORIES
         and art:SetMap(CONTINENT_MAPS[group.continent] or WORLD_MAP, true) then
         return
@@ -141,7 +144,8 @@ function View:InitialContinent()
     local byMap = {}
     for _, groups in pairs(ns.Quests:Groups()) do
         for _, group in ipairs(groups) do
-            if group.uiMap then byMap[group.uiMap] = group end
+            -- A category shows the map of a place it is not.
+            if group.uiMap and group.continent ~= Continent.CATEGORIES then byMap[group.uiMap] = group end
         end
     end
     for _, uiMap in ipairs(maps) do

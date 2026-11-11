@@ -8,7 +8,6 @@ local UI, Theme, Layout, QuestWidgets = ns.UI, ns.Theme, ns.Layout, ns.QuestWidg
 local C = Theme.colors
 local Kind = ns.Const.Instance
 
-local LOADING_SCREEN_RATIO = 16 / 9
 
 local function buildInstanceCard(row)
     UI.ArtCard(row)
@@ -65,7 +64,7 @@ local function newView(kind)
         local complete = summary.total > 0 and summary.done >= summary.total
         row.count:SetTextColor(Theme.Unpack(complete and C.green or C.text))
         row.levels:SetText(instance.levels and QuestWidgets.LevelText(instance.levels[1], instance.levels[2]) or "")
-        if not row.art:SetFile(instance.art, LOADING_SCREEN_RATIO) then row.art:Clear() end
+        if not row.art:SetLoadingScreen(instance.art, instance.artFramed) then row.art:Clear() end
         row.border:SetColor(self.selected == instance and C.gold or (complete and C.greenBorder or C.borderDim))
         row:SetScript("OnClick", function()
             self.selected = instance
@@ -172,7 +171,7 @@ local function newView(kind)
         banner.subtitle:SetText(table.concat(parts, "  ·  "))
         banner.caption:SetText(string.format(L.INSTANCE_CAPTION, summary.bossesDone, summary.bosses, summary.questsDone, summary.quests))
         banner.ring:SetProgress(summary.done, summary.total, summary.total > 0 and summary.done >= summary.total and L.COMPLETE or L.DONE)
-        if not banner.art:SetFile(instance.art, LOADING_SCREEN_RATIO) then banner.art:Clear() end
+        if not banner.art:SetLoadingScreen(instance.art, instance.artFramed) then banner.art:Clear() end
 
         self.entries:SetItems(self:BuildEntries(instance, view), true)
         if self.selectedKind == "boss" and self.selectedEntry then

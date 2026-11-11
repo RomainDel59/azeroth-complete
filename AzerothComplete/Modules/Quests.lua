@@ -224,13 +224,14 @@ function Quests:Groups()
         local continent = zone.continent or Continent.OTHER
         groups[continent] = groups[continent] or {}
         table.insert(groups[continent], { kind = "zone", id = areaID, chains = zone.chains, levels = zone.levels,
-            continent = continent, uiMap = zone.uiMap, art = zone.art, icon = zone.icon })
+            continent = continent, uiMap = zone.uiMap, art = zone.art, artFramed = zone.artFramed })
     end
     -- Areas that only name a set of quests are already among the categories.
     groups[Continent.CATEGORIES] = groups[Continent.CATEGORIES] or {}
     for sortID, sort in pairs(ns.Data.QuestSorts) do
         table.insert(groups[Continent.CATEGORIES], { kind = "sort", id = sortID, chains = sort.chains,
-            levels = sort.levels, continent = Continent.CATEGORIES })
+            levels = sort.levels, continent = Continent.CATEGORIES, uiMap = sort.uiMap, art = sort.art,
+            artRatio = sort.artRatio, artFramed = sort.artFramed })
     end
     self.groups = groups
     return groups

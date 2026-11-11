@@ -7,8 +7,8 @@ Two sources are combined:
   plus English names used as a last resort when the client cannot provide a text.
 * The game client tables of the targeted WoW Forever build, as published by wago.tools:
   recipes, instances, encounters, collectible identifiers, map exploration overlays, the
-  loading screens that stand for zones without a drawable map, and the localized strings the
-  client API does not expose.
+  loading screens that stand for zones without a drawable map, the talent backgrounds of the
+  class categories, and the localized strings the client API does not expose.
 
 Usage:
     python -I tools/build_data.py [--build 1.60.1.70888] [--cache DIR] [--questiedb DIR]
@@ -26,6 +26,7 @@ import platform
 import shutil
 import subprocess
 import sys
+import urllib.parse
 import urllib.request
 from collections import defaultdict
 from concurrent.futures import ThreadPoolExecutor
@@ -38,13 +39,14 @@ LOCALES = ("enUS", "frFR")
 QUESTIEDB_REPO = "https://github.com/Questie/QuestieDB.git"
 WAGO_URL = "https://wago.tools/db2/{table}/csv?build={build}{locale}"
 WAGO_FILE_URL = "https://wago.tools/api/casc/{file}?version={build}"
+WAGO_FILE_SEARCH_URL = "https://wago.tools/api/files?search={path}&version={build}"
 
 # Client tables read by the builder. Localized tables are also fetched for every locale.
 TABLES = ("QuestV2", "AreaTable", "Map", "LoadingScreens", "ChrRaces", "ChrClasses", "QuestSort",
           "SkillLine", "SkillLineAbility", "SpellReagents", "SpellEffect", "ItemEffect",
           "ItemXItemEffect", "DungeonEncounter", "Mount", "BattlePetSpecies", "Toy",
           "TransmogSet", "CharTitles", "UiMapXMapArt", "UiMapArtTile", "WorldMapOverlay",
-          "WorldMapOverlayTile")
+          "WorldMapOverlayTile", "TalentTab")
 LOCALIZED_TABLES = ("AreaTable", "UiMap", "QuestSort", "SkillLine", "DungeonEncounter", "Toy")
 
 # Quest flags (cmangos quest_template conventions used by QuestieDB).
@@ -86,10 +88,31 @@ TRANSIT_EASTERN_KINGDOMS = {369}
 ZONE_INSTANCES = {
     25: (230, 229),  # Blackrock Mountain: Blackrock Depths, Blackrock Spire
 }
-# Icon of the interface (a key of the addon theme) shown on the card of an area that only
-# names a set of quests, which the quests tab lists among the categories.
-LABEL_AREA_ICONS = {
-    16941: "professions",  # Crafting: the craftsman's writs
+# Places whose artwork stands for the quest categories other than the classes, which show
+# their talent background: ("map", uiMap) draws a zone map, ("instance", map) shows the
+# loading screen of an instance. Keys are quest sorts, and areas that only name quests.
+CATEGORY_PLACES = {
+    0: ("map", 947),          # Miscellaneous: Azeroth
+    1: ("instance", 469),     # Epic: Blackwing Lair
+    22: ("map", 1426),        # Seasonal: Dun Morogh, under the snow of the Winter Veil
+    24: ("map", 1449),        # Herbalism: Un'Goro Crater
+    101: ("map", 1434),       # Fishing: Stranglethorn Vale, home of the fishing contest
+    121: ("map", 1427),       # Blacksmithing: Searing Gorge, the Thorium Brotherhood
+    181: ("map", 1435),       # Alchemy: Swamp of Sorrows
+    182: ("map", 1444),       # Leatherworking: Feralas
+    201: ("instance", 90),    # Engineering: Gnomeregan
+    264: ("map", 1452),       # Tailoring: Winterspring, the moonwell of the mooncloth
+    284: ("map", 1446),       # Special: Tanaris
+    304: ("map", 1436),       # Cooking: Westfall
+    324: ("map", 1445),       # First Aid: Dustwallow Marsh, the triage of Theramore
+    344: ("instance", 533),   # Legendary: Naxxramas
+    365: ("instance", 531),   # Ahn'Qiraj War: Temple of Ahn'Qiraj
+    366: ("map", 1450),       # Lunar Festival: Moonglade
+    368: ("map", 1423),       # Invasion: Eastern Plaguelands
+    369: ("map", 1428),       # Midsummer: Burning Steppes, for the fires
+    666: ("map", 1440),       # Camping: Ashenvale
+    676: ("map", 1438),       # Night Elf: Teldrassil
+    16941: ("map", 1455),     # Crafting: Ironforge, around its great forge
 }
 
 # Name markers of client rows that are not real content.
@@ -128,12 +151,28 @@ def fetch_tables(cache: Path, build: str) -> None:
 class ShippedFiles:
     """Tells whether the client build ships a file. The tables reference artwork of content
     the Forever client does not include; such a file is empty in its storage and the game
-    draws it as a solid green texture. Answers are cached in files.json."""
+    draws it as a solid green texture. Answers are cached in files.json, and the file ids of
+    client paths in paths.json."""
 
     def __init__(self, cache: Path, build: str):
         self.build = build
         self.path = cache / "files.json"
         self.known = json.loads(self.path.read_text(encoding="utf-8")) if self.path.exists() else {}
+        self.paths_file = cache / "paths.json"
+        self.paths = json.loads(self.paths_file.read_text(encoding="utf-8")) if self.paths_file.exists() else {}
+
+    def file_id(self, path: str) -> int:
+        """File id of a client path such as interface/talentframe/magefire-topleft.blp, or 0
+        when no file has that path."""
+        path = path.lower()
+        if path not in self.paths:
+            url = WAGO_FILE_SEARCH_URL.format(path=urllib.parse.quote(path), build=self.build)
+            request = urllib.request.Request(url, headers={"User-Agent": "azeroth-complete-build/1.0"})
+            with urllib.request.urlopen(request, timeout=120) as response:
+                found = json.loads(response.read())
+            self.paths[path] = next((int(k) for k, v in (found or {}).items() if v.lower() == path), 0)
+            self.paths_file.write_text(json.dumps(self.paths, indent=0, sort_keys=True), encoding="utf-8")
+        return self.paths[path]
 
     def _probe(self, file_id: int) -> bool:
         url = WAGO_FILE_URL.format(file=file_id, build=self.build)
@@ -272,7 +311,9 @@ class World:
     """Areas, maps and instances of the client, used to place quests."""
 
     def __init__(self, cache: Path, questie: dict, shipped: ShippedFiles):
+        self.cache = cache
         self.shipped = shipped
+        self.framed: set[int] = set()
         self.areas = {to_int(r["ID"]): r for r in read_table(cache, "AreaTable")}
         self.maps = {to_int(r["ID"]): r for r in read_table(cache, "Map")}
         self.loading = {to_int(r["ID"]): r for r in read_table(cache, "LoadingScreens")}
@@ -383,6 +424,9 @@ class World:
         return 0
 
     def loading_screen(self, map_id: int) -> int:
+        """Loading screen of a map. The images of the original client (the narrow screen
+        column) are framed: 4:3, with a parchment band and the game logo at the top and a band
+        at the bottom; they are recorded in `framed`."""
         row = self.maps.get(map_id)
         screen = self.loading.get(to_int(row["LoadingScreenID"])) if row else None
         if not screen:
@@ -390,8 +434,14 @@ class World:
         for column in ("MainImageFileDataID", "WideScreen169FileDataID", "WideScreenFileDataID", "NarrowScreenFileDataID"):
             file_id = to_int(screen.get(column))
             if file_id and self.shipped(file_id):
+                if column == "NarrowScreenFileDataID":
+                    self.framed.add(file_id)
                 return file_id
         return 0
+
+    def screen_art(self, file_id: int) -> dict:
+        """Data fields of a loading screen shown as artwork."""
+        return {"art": file_id, "artFramed": True} if file_id in self.framed else {"art": file_id}
 
 
 # ---------------------------------------------------------------------------
@@ -530,16 +580,18 @@ def build_quests(world: World, questie: dict, valid_ids: set[int]) -> tuple[dict
         row = {"continent": world.continent_of(area_id), "uiMap": ui_map, **describe(entry["quests"])}
         if not world.is_place(area_id, ui_map):
             row["continent"] = CONTINENT_CATEGORIES
-            row["icon"] = LABEL_AREA_ICONS.get(area_id)
+            row.update(category_place(world, area_id))
         else:
             art = world.zone_art(area_id, ui_map)
             if art is not None:
-                row["art"] = art
+                row.update(world.screen_art(art))
         zone_rows[area_id] = row
     without_map = {a: r["art"] for a, r in zone_rows.items() if "art" in r}
     log(f"zones without a drawable map: {len(without_map)} {without_map}; "
         f"label areas listed as categories: {[a for a, r in zone_rows.items() if r['continent'] == CONTINENT_CATEGORIES]}")
     sort_rows = {sort_id: describe(entry["quests"]) for sort_id, entry in sorts.items()}
+    for sort_id, art in category_art(world, sorts).items():
+        sort_rows[sort_id].update(art)
 
     referenced = {"npcs": set(), "objects": set(), "items": set()}
     for row in quests.values():
@@ -548,6 +600,49 @@ def build_quests(world: World, questie: dict, valid_ids: set[int]) -> tuple[dict
                 referenced[("npcs", "objects", "items")[giver[0] - 1]].add(giver[1])
     log(f"quests: {len(quests)} in {len(zone_rows)} zones, {len(sort_rows)} categories, {len(instances)} instances")
     return quests, zone_rows, sort_rows, {"instances": dict(instances), "referenced": referenced}
+
+
+def category_place(world: World, key: int) -> dict:
+    """Artwork of the place chosen for a quest category, if the client can draw it."""
+    kind, place = CATEGORY_PLACES.get(key, (None, None))
+    if kind == "map" and world.map_drawable(place):
+        return {"uiMap": place}
+    if kind == "instance" and world.loading_screen(place):
+        return world.screen_art(world.loading_screen(place))
+    if kind:
+        log(f"WARNING: the place chosen for category {key} cannot be drawn: {kind} {place}")
+    return {}
+
+
+def category_art(world: World, sorts: dict) -> dict[int, dict]:
+    """Artwork of the quest categories. A class category shows the talent background of the
+    class, linked through the English names of the category and the class; any other shows
+    the place chosen for it."""
+    cache = world.cache
+    sort_names = {to_int(r["ID"]): r["SortName_lang"] for r in read_table(cache, "QuestSort", "enUS")}
+    classes = {r["Name_lang"]: to_int(r["ID"]) for r in read_table(cache, "ChrClasses")}
+    tabs = defaultdict(list)
+    for row in read_table(cache, "TalentTab"):
+        for class_id in classes.values():
+            if to_int(row["ClassMask"]) & (1 << (class_id - 1)) and row["BackgroundFile"]:
+                tabs[class_id].append((to_int(row["OrderIndex"]), row["BackgroundFile"]))
+    result = {}
+    world.shipped.prefetch(f for kind, place in CATEGORY_PLACES.values() if kind == "map"
+                           for f in world.map_tiles.get(place, []))
+    for sort_id in sorts:
+        for _, background in sorted(tabs.get(classes.get(sort_names.get(sort_id)), [])):
+            file_id = world.shipped.file_id(f"interface/talentframe/{background}-topleft.blp")
+            if file_id and world.shipped(file_id):
+                # The top left part of a talent background is a square of 256 pixels.
+                result[sort_id] = {"art": file_id, "artRatio": 1}
+                break
+        if sort_id not in result:
+            result[sort_id] = category_place(world, sort_id)
+            if sort_id not in CATEGORY_PLACES:
+                log(f"WARNING: no place chosen for category {sort_id}")
+    log(f"category artwork: {sum(1 for a in result.values() if a.get('artRatio'))} talent backgrounds, "
+        f"{sum(1 for a in result.values() if a and not a.get('artRatio'))} chosen places")
+    return result
 
 
 def build_chains(quest_ids: list[int], quests: dict[int, list]) -> list[list[int]]:
@@ -738,7 +833,7 @@ def build_instances(cache: Path, world: World, instance_quests: dict[int, list[i
             "kind": kind,
             "area": to_int(row["AreaTableID"]),
             "players": to_int(row.get("MaxPlayers")),
-            "art": world.loading_screen(map_id),
+            **world.screen_art(world.loading_screen(map_id)),
             "bosses": [e["id"] for e in bosses],
             "chains": build_chains(quest_ids, quests) if quest_ids else [],
             "levels": [min(levels), max(levels)] if levels else None,

@@ -17,7 +17,8 @@ function Instances:List(kind)
     local list = {}
     for mapID, instance in pairs(ns.Data.Instances) do
         if instance.kind == kind then
-            list[#list + 1] = { mapID = mapID, area = instance.area, art = instance.art, bosses = instance.bosses,
+            list[#list + 1] = { mapID = mapID, area = instance.area, art = instance.art, artFramed = instance.artFramed,
+                bosses = instance.bosses,
                 chains = instance.chains, levels = instance.levels, players = instance.players, kind = kind }
         end
     end

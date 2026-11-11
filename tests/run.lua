@@ -136,8 +136,12 @@ local artOf = function(group)
     questsView:SelectGroup(group)
     return questsView.banner.art.request
 end
-check(artOf(crafting).kind == "icon", "a category area shows its icon")
-check(artOf(findGroup("ek", 25)).kind == "file", "Blackrock Mountain shows the loading screen of its instances")
+local warrior = artOf(findGroup("categories", 81))
+check(warrior and warrior.kind == "file" and warrior.ratio == 1, "a class category shows its talent background")
+local blackrock = artOf(findGroup("ek", 25))
+check(blackrock.kind == "file", "Blackrock Mountain shows the loading screen of its instances")
+check(blackrock.top and blackrock.top > 0 and blackrock.bottom < 1,
+    "a framed loading screen is cropped to its painting, without the logo band")
 local noArt = { kind = "zone", id = 12, continent = ns.Const.Continent.EASTERN_KINGDOMS, chains = {}, art = 0 }
 local request = artOf(noArt)
 check(request.kind == "map" and request.dimmed and request.key:find("1415", 1, true),

@@ -55,13 +55,6 @@ function UI.Text(parent, size, color, family, justify, layer)
     return text
 end
 
--- Text drawn over artwork: a black outline keeps it readable on light areas of the image.
-function UI.ArtText(parent, size, color, family, justify)
-    local text = UI.Text(parent, size, color, family, justify)
-    text:SetFont(Theme.fonts[family or "body"], size or 12, "OUTLINE")
-    return text
-end
-
 -- Text that wraps on several lines inside a fixed width.
 function UI.Paragraph(parent, size, color, width)
     local text = UI.Text(parent, size, color)
@@ -305,8 +298,7 @@ end
 -------------------------------------------------------------------------------
 
 -- Frame that crops artwork to its own bounds. SetMap shows the world map art of a zone,
--- SetFile a single texture (a loading screen), SetIcon an icon in the middle; without art,
--- a gradient remains.
+-- SetFile a single texture (a loading screen); without art, a gradient remains.
 -- The game draws every child frame above the regions of its parent, so texts and borders
 -- created on the parent would be hidden by the artwork: they belong on `frame.overlay`.
 function UI.Art(parent)
@@ -338,6 +330,15 @@ function UI.Art(parent)
 
     function frame.SetShade(_, fraction)
         frame.shade:SetHeight(math.max(1, (frame:GetHeight() or 0) * fraction))
+    end
+
+    -- Darkens the whole artwork, more at the bottom than at the top, for frames that hold
+    -- text from top to bottom.
+    function frame.DarkenFully(_, bottomAlpha, topAlpha)
+        frame.shadeFraction = 1
+        if frame.shade.SetGradient and CreateColor then
+            frame.shade:SetGradient("VERTICAL", CreateColor(0, 0, 0, bottomAlpha), CreateColor(0, 0, 0, topAlpha))
+        end
     end
 
     -- The artwork is drawn once the frame has a size; until then the request stays pending
@@ -418,31 +419,20 @@ function UI.Art(parent)
         drawExploration(overlays, scale)
     end
 
-    local function drawFile(fileID, ratio)
+    -- `top` and `bottom` keep a horizontal band of the texture, in fractions of its height.
+    local function drawFile(fileID, ratio, top, bottom)
         local tile = frame.tiles[1] or frame.canvas:CreateTexture(nil, "BACKGROUND", nil, 1)
         frame.tiles[1] = tile
+        top, bottom = top or 0, bottom or 1
+        ratio = ratio / (bottom - top)
         local width, height = frame:GetWidth(), frame:GetHeight()
         local scale = math.max(width / ratio, height)
         frame.canvas:SetSize(scale * ratio, scale)
         tile:ClearAllPoints()
         tile:SetAllPoints(frame.canvas)
         tile:SetTexture(fileID)
-        tile:SetTexCoord(0, 1, 0, 1)
+        tile:SetTexCoord(0, 1, top, bottom)
         tile:SetVertexColor(1, 1, 1)
-        tile:Show()
-    end
-
-    -- An icon is too small to cover the frame: it stands in the middle, its border cropped.
-    local function drawIcon(path)
-        local tile = frame.tiles[1] or frame.canvas:CreateTexture(nil, "BACKGROUND", nil, 1)
-        frame.tiles[1] = tile
-        local size = math.max(1, math.min(frame:GetWidth(), frame:GetHeight()) - 12)
-        frame.canvas:SetSize(size, size)
-        tile:ClearAllPoints()
-        tile:SetAllPoints(frame.canvas)
-        tile:SetTexture(path)
-        tile:SetTexCoord(0.08, 0.92, 0.08, 0.92)
-        tile:SetVertexColor(0.8, 0.8, 0.8)
         tile:Show()
     end
 
@@ -452,10 +442,8 @@ function UI.Art(parent)
         hideTiles()
         if request.kind == "map" then
             drawMap(request.layer, request.textures, request.overlays, request.dimmed)
-        elseif request.kind == "icon" then
-            drawIcon(request.path)
         else
-            drawFile(request.fileID, request.ratio)
+            drawFile(request.fileID, request.ratio, request.top, request.bottom)
         end
     end
 
@@ -473,24 +461,22 @@ function UI.Art(parent)
         return true
     end
 
-    -- Shows a single texture covering the frame, cropped to keep its ratio (width / height).
-    function frame.SetFile(_, fileID, ratio)
+    -- Shows a single texture covering the frame, cropped to keep its ratio (width / height),
+    -- optionally reduced to the band between `top` and `bottom` (fractions of its height).
+    function frame.SetFile(_, fileID, ratio, top, bottom)
         if not fileID or fileID == 0 then return false end
-        local key = "file:" .. tostring(fileID)
+        local key = string.format("file:%s:%s:%s:%s", tostring(fileID), tostring(ratio), tostring(top), tostring(bottom))
         if frame.request and frame.request.key == key then return true end
-        frame.request = { key = key, kind = "file", fileID = fileID, ratio = ratio or 16 / 9 }
+        frame.request = { key = key, kind = "file", fileID = fileID, ratio = ratio or 16 / 9, top = top, bottom = bottom }
         draw()
         return true
     end
 
-    -- Shows an icon (a texture path or file) in the middle of the frame.
-    function frame.SetIcon(_, path)
-        if not path then return false end
-        local key = "icon:" .. tostring(path)
-        if frame.request and frame.request.key == key then return true end
-        frame.request = { key = key, kind = "icon", path = path }
-        draw()
-        return true
+    -- Shows a loading screen. A framed one (the 4:3 images of the original client) keeps the
+    -- painting between its parchment bands, which carry the game logo.
+    function frame.SetLoadingScreen(_, fileID, framed)
+        if framed then return frame:SetFile(fileID, 4 / 3, 0.23, 0.79) end
+        return frame:SetFile(fileID, 16 / 9)
     end
 
     frame:SetScript("OnSizeChanged", function()
@@ -502,24 +488,21 @@ end
 
 -- List card with artwork, as high as its two lines of text: the name across the top, the
 -- level range and the count below it, with a border and a hover glow, all drawn above the
--- artwork, which is darkened from the bottom up to keep both lines readable.
+-- artwork, which is darkened to keep both lines readable.
 UI.ART_CARD_HEIGHT = 46
 
 function UI.ArtCard(row)
     row.art = UI.Art(row)
     row.art:SetAllPoints()
-    row.art.shadeFraction = 1
-    if row.art.shade.SetGradient and CreateColor then
-        row.art.shade:SetGradient("VERTICAL", CreateColor(0, 0, 0, 0.8), CreateColor(0, 0, 0, 0.4))
-    end
+    row.art:DarkenFully(0.8, 0.45)
     local overlay = row.art.overlay
     row.border = UI.Border(overlay, C.borderDim, 2)
-    row.name = UI.ArtText(overlay, 14, C.text)
+    row.name = UI.Text(overlay, 14, C.text)
     row.name:SetPoint("TOPLEFT", 10, -7)
     row.name:SetPoint("TOPRIGHT", -10, -7)
-    row.count = UI.ArtText(overlay, 12, C.text, "body", "RIGHT")
+    row.count = UI.Text(overlay, 12, C.text, "body", "RIGHT")
     row.count:SetPoint("BOTTOMRIGHT", -10, 7)
-    row.levels = UI.ArtText(overlay, 11, C.goldDim)
+    row.levels = UI.Text(overlay, 11, C.goldDim)
     row.levels:SetPoint("BOTTOMLEFT", 10, 7)
     row.levels:SetPoint("BOTTOMRIGHT", row.count, "BOTTOMLEFT", -6, 0)
     -- The highlight layer only follows the mouse on the button itself, under the artwork.
