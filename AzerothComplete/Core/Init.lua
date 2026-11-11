@@ -55,9 +55,20 @@ local eventFrame = CreateFrame("Frame")
 local eventHandlers = {}   -- [event] = { handler, ... }
 local messageHandlers = {} -- [message] = { handler, ... }
 
+-- The client fires some game events (skill lines, quest log) before PLAYER_LOGIN, when the
+-- character record does not exist yet. They are skipped: every module reads its state again
+-- at login.
+local LIFECYCLE_EVENTS = { ADDON_LOADED = true, PLAYER_LOGIN = true }
+local loggedIn = false
+local skippedBeforeLogin = {} -- [event] = count
+
 eventFrame:SetScript("OnEvent", function(_, event, ...)
     local handlers = eventHandlers[event]
     if not handlers then return end
+    if not loggedIn and not LIFECYCLE_EVENTS[event] then
+        skippedBeforeLogin[event] = (skippedBeforeLogin[event] or 0) + 1
+        return
+    end
     for i = 1, #handlers do
         ns:SafeCall("event " .. event, handlers[i], event, ...)
     end
@@ -140,6 +151,13 @@ end)
 ns:RegisterEvent("PLAYER_LOGIN", function()
     ns.Player:Refresh()
     ns.Database:TouchCharacter()
+    loggedIn = true
+    local skipped = {}
+    for event, count in pairs(skippedBeforeLogin) do skipped[#skipped + 1] = event .. " x" .. count end
+    if #skipped > 0 then
+        table.sort(skipped)
+        ns.Log:Info("Events skipped before login: %s", table.concat(skipped, ", "))
+    end
     ns.Diagnostics:Run()
     callModules("OnLogin")
     ns:SendMessage("AC_DATA_READY")
