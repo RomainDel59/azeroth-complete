@@ -173,7 +173,7 @@ local function anyDone(list, completed)
 end
 
 -- Returns the status of a quest in a view and, for locked quests, the reason
--- ("level" or "prerequisite"); for closed alternatives, "exclusive" or "breadcrumb".
+-- ("level", "skill" or "prerequisite"); for closed alternatives, "exclusive" or "breadcrumb".
 function Quests:Status(questID, view)
     local row = ns.Data.Quests[questID]
     local completed = completedSet(view)
@@ -191,6 +191,10 @@ function Quests:Status(questID, view)
     end
     if view.tracking == Tracking.CHARACTER and (ns.Player.level or 0) < row[Q.MIN_LEVEL] then
         return Status.LOCKED, "level"
+    end
+    local skill = row[Q.SKILL]
+    if view.tracking == Tracking.CHARACTER and skill and ns.Professions:RankBelow(skill[1], skill[2]) then
+        return Status.LOCKED, "skill"
     end
     return Status.AVAILABLE
 end

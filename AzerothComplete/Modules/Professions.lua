@@ -212,6 +212,14 @@ function Professions:HasLearned(skillLine)
     return ns.Database:Character().professions[skillLine] ~= nil
 end
 
+-- Whether the character's rank of a profession is below `rank`, an unlearned profession
+-- counting as rank 0; false when the skills cannot be read.
+function Professions:RankBelow(skillLine, rank)
+    if not self.ranksRead or not ns.Data.Professions[skillLine] then return false end
+    local entry = ns.Database:Character().professions[skillLine]
+    return (entry and entry.rank or 0) < (rank or 0)
+end
+
 -- Professions shown in a view: in the character filter, only the learned ones.
 function Professions:Shown(view)
     local list = self:List()
