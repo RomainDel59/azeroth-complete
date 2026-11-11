@@ -21,6 +21,15 @@ ns:RegisterLocale("enUS", {
     TRACKING_LABEL = "Tracking:",
     TRACKING_ACCOUNT = "Account",
     TRACKING_CHARACTER = "Character",
+    TRACKING_TOOLTIP_CHARACTER = "Progress of this character. Click to show the progress of the whole account.",
+    TRACKING_TOOLTIP_ACCOUNT = "Progress of every character of the account. Click to show this character only.",
+    FILTER_LABEL = "Show:",
+    FILTER_POSSIBLE = "Within reach",
+    FILTER_EVERYTHING = "Everything",
+    FILTER_TOOLTIP_POSSIBLE = "Only what this character can do: its race, its class and the professions it has learned. Click to show everything.",
+    FILTER_TOOLTIP_EVERYTHING = "Everything of the faction, whatever this character can do. Click to keep only what is within its reach.",
+    FILTER_UNAVAILABLE = "This filter applies to the progress of the character, in its own faction.",
+    NO_PROFESSION_LEARNED = "This character has learned no profession.",
 
     -- Common
     LOADING = "...",

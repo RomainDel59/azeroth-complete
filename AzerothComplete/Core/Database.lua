@@ -13,6 +13,7 @@ local SCHEMA_VERSION = 1
 
 local DEFAULT_SETTINGS = {
     tracking = ns.Const.Tracking.CHARACTER,
+    possibleOnly = true, -- character view: only what the character can do
     scale = 1,
     minimap = { angle = 200, hidden = false },
     showCompleted = true,

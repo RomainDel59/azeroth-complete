@@ -203,6 +203,51 @@ function UI.Button(parent, width, height, label, onClick)
 end
 
 -- Tab button: icon + label.
+-- Header switch: "LABEL: [icon] value". A click calls `onClick`, which switches the value;
+-- a switch that does not apply is dimmed and explains why in its tooltip.
+function UI.Toggle(parent, label, onClick)
+    local toggle = CreateFrame("Button", nil, parent)
+    toggle:SetHeight(22)
+    toggle.label = UI.Text(toggle, 13, C.text)
+    toggle.label:SetPoint("LEFT")
+    toggle.label:SetText(label:upper())
+    toggle.icon = UI.Icon(toggle, 18)
+    toggle.icon:SetPoint("LEFT", toggle.label, "RIGHT", 10, 0)
+    toggle.text = UI.Text(toggle, 14, C.gold)
+    toggle.text:SetPoint("LEFT", toggle.icon, "RIGHT", 8, 0)
+    toggle.available = true
+
+    local function resize()
+        toggle:SetWidth(toggle.label:GetStringWidth() + 10 + 18 + 8 + toggle.text:GetStringWidth())
+    end
+
+    -- Shows the current value, with the tooltip that tells what a click does.
+    function toggle.SetValue(_, icon, text, tooltip)
+        toggle.icon:SetTexture(icon)
+        toggle.text:SetText(text)
+        toggle.tooltip = tooltip
+        resize()
+    end
+
+    -- A switch that does not apply in the current state keeps its value, dimmed.
+    function toggle.SetAvailable(_, available, reason)
+        toggle.available = available
+        toggle.reason = reason
+        toggle:SetAlpha(available and 1 or 0.45)
+    end
+
+    toggle:SetScript("OnClick", function()
+        if toggle.available then onClick() end
+    end)
+    toggle:SetScript("OnEnter", function(self)
+        GameTooltip:SetOwner(self, "ANCHOR_BOTTOM")
+        GameTooltip:SetText((self.available and self.tooltip or self.reason) or "", 1, 1, 1, 1, true)
+        GameTooltip:Show()
+    end)
+    toggle:SetScript("OnLeave", function() GameTooltip:Hide() end)
+    return toggle
+end
+
 function UI.TabButton(parent, width, height, icon, label, onClick)
     local button = UI.Button(parent, width, height, label, onClick)
     button.icon = UI.FramedIcon(button, height - 8)

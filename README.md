@@ -24,6 +24,9 @@ in the language of the player's client.
 - **Collections and toys**: what is owned and what is missing, with the source of each item.
 - **Account or character tracking**: the account view merges the progress of every character
   that logged in with the addon enabled; a faction selector shows the other faction's quests.
+- **Within reach**: the character view keeps only what the character can do (its race, its
+  class and the professions it has learned), with the counts to match; a switch shows
+  everything.
 
 ## Installation
 

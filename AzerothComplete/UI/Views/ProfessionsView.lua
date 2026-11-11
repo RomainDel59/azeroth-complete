@@ -271,10 +271,35 @@ function View:RefreshRecipes()
     self.recipeCount:SetText(string.format(L.RECIPES_LISTED, #items))
 end
 
+-- The character has learned no profession: the filter leaves nothing to show.
+function View:ShowEmpty()
+    self.rankValue = nil
+    self.title:SetText("")
+    self.rank:SetText(L.NO_PROFESSION_LEARNED)
+    self.rank:SetTextColor(Theme.Unpack(C.textDim))
+    self.catalogue:SetText("")
+    self.recipes:SetItems({})
+    self.recipeCount:SetText("")
+    self:ShowRecipe(nil)
+    self.mainFrame:SetFooter(L.FOOTER_PROFESSIONS)
+end
+
 function View:Refresh()
     local tracking = ns.Database:Settings().tracking
     self.known = ns.Professions:Known(tracking)
-    local list = ns.Professions:List()
+    local list = ns.Professions:Shown(self.mainFrame:View())
+    local listed = false
+    for _, profession in ipairs(list) do
+        if profession.skillLine == self.selected then listed = true end
+    end
+    if not listed then
+        self.selected, self.selectedRecipe = nil, nil
+    end
+    self.professions:SetItems(list, true)
+    if #list == 0 then
+        self:ShowEmpty()
+        return
+    end
     if not self.selected then
         for _, profession in ipairs(list) do
             if ns.Professions:Rank(profession.skillLine, tracking) and #profession.recipes > 0 then
@@ -284,7 +309,6 @@ function View:Refresh()
         end
         self.selected = self.selected or (list[1] and list[1].skillLine)
     end
-    self.professions:SetItems(list, true)
 
     local profession = ns.Professions:Get(self.selected)
     local rank = ns.Professions:Rank(self.selected, tracking)

@@ -601,6 +601,51 @@ def build_quests(world: World, questie: dict, valid_ids: set[int]) -> tuple[dict
     return quests, zone_rows, sort_rows, {"instances": dict(instances), "referenced": referenced}
 
 
+QUEST_CRAFT_INDEX = 17  # Core/Constants.lua Quest.CRAFT, one-based 18
+
+
+def link_crafting_orders(quests: dict, zones: dict, questie: dict, professions: dict) -> None:
+    """Links to a profession the quests of the areas that only name quests (the crafting
+    orders of the craftsman's writs): a quest asking for an item that a recipe creates needs
+    the profession of that recipe. Elsewhere such items can be bought, so no link is made."""
+    crafted = {}
+    for skill_line, profession in professions.items():
+        for recipe in profession["recipes"]:
+            if recipe[5]:
+                crafted.setdefault(recipe[5], skill_line)
+    linked = 0
+    for area_id, zone in zones.items():
+        if zone["continent"] != CONTINENT_CATEGORIES:
+            continue
+        for chain in zone["chains"]:
+            for quest_id in chain:
+                row = quests[quest_id]
+                if row[13]:
+                    continue
+                items = (questie["quests"].get(str(quest_id)) or {}).get("objectiveItems") or []
+                skill = next((crafted[i] for i in items if i in crafted), None)
+                if skill:
+                    row.extend([None] * (QUEST_CRAFT_INDEX + 1 - len(row)))
+                    row[QUEST_CRAFT_INDEX] = skill
+                    linked += 1
+    log(f"crafting orders linked to a profession: {linked}")
+
+
+def link_profession_categories(cache: Path, sorts: dict, professions: dict) -> None:
+    """Links the quest categories of the professions to their skill line, through the
+    English names of the category and the profession."""
+    sort_names = {to_int(r["ID"]): r["SortName_lang"] for r in read_table(cache, "QuestSort", "enUS")}
+    line_ids = {r["DisplayName_lang"]: to_int(r["ID"]) for r in read_table(cache, "SkillLine", "enUS")
+                if to_int(r["ID"]) in professions}
+    linked = []
+    for sort_id, row in sorts.items():
+        skill = line_ids.get(sort_names.get(sort_id))
+        if skill:
+            row["skill"] = skill
+            linked.append(sort_names[sort_id])
+    log(f"profession categories: {', '.join(sorted(linked))}")
+
+
 def category_screen(world: World, key: int) -> dict:
     """Loading screen chosen for a quest category, if the client ships it."""
     map_id = CATEGORY_SCREENS.get(key)
@@ -993,6 +1038,8 @@ def main() -> int:
     quests, zones, sorts, extra = build_quests(world, questie, valid_ids)
     referenced = extra["referenced"]
     professions = build_professions(cache, questie, referenced)
+    link_crafting_orders(quests, zones, questie, professions)
+    link_profession_categories(cache, sorts, professions)
     instances, encounters = build_instances(cache, world, extra["instances"], quests)
     collections = build_collections(cache)
     overlays = build_map_overlays(cache, {z["uiMap"] for z in zones.values() if z.get("uiMap")}, shipped)

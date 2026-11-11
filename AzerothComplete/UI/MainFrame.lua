@@ -96,52 +96,35 @@ local function buildTabs(frame)
     rule:SetPoint("TOPRIGHT", -24, -134)
 end
 
+-- The three switches of the header share one style and spread over the width of the window:
+-- the faction on the left, the tracking mode in the middle, the filter on the right.
 local function buildSelectors(frame)
-    local factionLabel = UI.Text(frame, 13, C.text)
-    factionLabel:SetPoint("TOPLEFT", 28, -144)
-    factionLabel:SetText(L.FACTION_LABEL:upper())
-
-    local faction = CreateFrame("Button", nil, frame)
-    faction:SetSize(150, 22)
-    faction:SetPoint("LEFT", factionLabel, "RIGHT", 10, 0)
-    faction.icon = UI.Icon(faction, 18)
-    faction.icon:SetPoint("LEFT")
-    faction.text = UI.Text(faction, 14, C.gold)
-    faction.text:SetPoint("LEFT", faction.icon, "RIGHT", 8, 0)
-    faction:SetScript("OnClick", function()
+    local faction = UI.Toggle(frame, L.FACTION_LABEL, function()
         local current = MainFrame.state.faction or ns.Player.faction
         MainFrame.state.faction = current == Faction.ALLIANCE and Faction.HORDE or Faction.ALLIANCE
         ns.Log:Debug("Faction shown: %s", MainFrame.state.faction)
         MainFrame:Refresh()
     end)
-    faction:SetScript("OnEnter", function(self)
-        GameTooltip:SetOwner(self, "ANCHOR_BOTTOM")
-        GameTooltip:SetText(L.FACTION_TOOLTIP, 1, 1, 1, 1, true)
-        GameTooltip:Show()
-    end)
-    faction:SetScript("OnLeave", function() GameTooltip:Hide() end)
+    faction:SetPoint("TOPLEFT", 28, -142)
     frame.faction = faction
 
-    local tracking = UI.ButtonGroup(frame, 150, 26, {
-        { label = L.TRACKING_ACCOUNT:upper(), value = Tracking.ACCOUNT },
-        { label = L.TRACKING_CHARACTER:upper(), value = Tracking.CHARACTER },
-    }, function(value)
-        ns.Database:Settings().tracking = value
-        ns.Log:Debug("Tracking mode: %s", value)
+    local tracking = UI.Toggle(frame, L.TRACKING_LABEL, function()
+        local settings = ns.Database:Settings()
+        settings.tracking = settings.tracking == Tracking.ACCOUNT and Tracking.CHARACTER or Tracking.ACCOUNT
+        ns.Log:Debug("Tracking mode: %s", settings.tracking)
         MainFrame:Refresh()
     end)
-    tracking:SetPoint("TOPRIGHT", -24, -140)
-    local trackingLabel = UI.Text(frame, 13, C.text, "body", "RIGHT")
-    trackingLabel:SetPoint("RIGHT", tracking, "LEFT", -12, 0)
-    trackingLabel:SetText(L.TRACKING_LABEL:upper())
-    -- Active tracking button uses the green style of the reference design.
-    for _, button in ipairs(tracking.buttons) do
-        local setActive = button.SetActive
-        button.SetActive = function(self, active)
-            setActive(self, active, active and { bg = C.greenDark, border = C.greenBorder, text = C.green } or nil)
-        end
-    end
+    tracking:SetPoint("TOP", 0, -142)
     frame.tracking = tracking
+
+    local filter = UI.Toggle(frame, L.FILTER_LABEL, function()
+        local settings = ns.Database:Settings()
+        settings.possibleOnly = settings.possibleOnly == false
+        ns.Log:Debug("Character filter: %s", tostring(settings.possibleOnly))
+        MainFrame:Refresh()
+    end)
+    filter:SetPoint("TOPRIGHT", -28, -142)
+    frame.filter = filter
 end
 
 local function buildFooter(frame)
@@ -238,9 +221,19 @@ function MainFrame:Refresh()
     local frame = self.frame
     if not frame or not frame:IsShown() then return end
     local faction = self.state.faction or ns.Player.faction
-    frame.faction.icon:SetTexture(faction == Faction.HORDE and Theme.icons.horde or Theme.icons.alliance)
-    frame.faction.text:SetText(faction == Faction.HORDE and L.FACTION_HORDE or L.FACTION_ALLIANCE)
-    frame.tracking:Select(ns.Database:Settings().tracking)
+    local horde = faction == Faction.HORDE
+    frame.faction:SetValue(horde and Theme.icons.horde or Theme.icons.alliance,
+        horde and L.FACTION_HORDE or L.FACTION_ALLIANCE, L.FACTION_TOOLTIP)
+    local settings = ns.Database:Settings()
+    local account = settings.tracking == Tracking.ACCOUNT
+    frame.tracking:SetValue(account and Theme.icons.account or Theme.icons.character,
+        account and L.TRACKING_ACCOUNT or L.TRACKING_CHARACTER,
+        account and L.TRACKING_TOOLTIP_ACCOUNT or L.TRACKING_TOOLTIP_CHARACTER)
+    local possible = settings.possibleOnly ~= false
+    frame.filter:SetValue(possible and Theme.icons.possible or Theme.icons.everything,
+        possible and L.FILTER_POSSIBLE or L.FILTER_EVERYTHING,
+        possible and L.FILTER_TOOLTIP_POSSIBLE or L.FILTER_TOOLTIP_EVERYTHING)
+    frame.filter:SetAvailable(not account and faction == ns.Player.faction, L.FILTER_UNAVAILABLE)
     local view = self.activeView
     if view and view.Refresh then
         ns:SafeCall("view " .. tostring(self.activeTab) .. " refresh", view.Refresh, view)

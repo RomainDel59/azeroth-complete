@@ -68,7 +68,7 @@ runFile(support .. "QuestXP/xpDB-traces.lua")
 
 -- Field indexes of the combined exports (see the legend at the top of each file).
 local QUEST = { name = 1, startedBy = 2, finishedBy = 3, requiredLevel = 4, questLevel = 5,
-    requiredRaces = 6, requiredClasses = 7, preQuestGroup = 12, preQuestSingle = 13,
+    requiredRaces = 6, requiredClasses = 7, objectives = 10, preQuestGroup = 12, preQuestSingle = 13,
     exclusiveTo = 16, zoneOrSort = 17, requiredSkill = 18, nextQuestInChain = 22,
     questFlags = 23, specialFlags = 24, parentQuest = 25, reputationReward = 26,
     breadcrumbForQuestId = 27 }
@@ -97,6 +97,16 @@ end
 local out = { quests = {}, npcs = {}, objects = {}, items = {}, areaToUiMap = areaToUiMap,
     subZoneToParent = subZoneToParent, dungeonAreas = dungeonAreas }
 
+-- Items a quest asks for: the third list of its objectives, { { itemID, text }, ... }.
+local function objectiveItems(objectives)
+    local result = {}
+    local list = type(objectives) == "table" and objectives[3]
+    for _, entry in ipairs(type(list) == "table" and list or {}) do
+        if type(entry) == "table" and entry[1] then result[#result + 1] = entry[1] end
+    end
+    return #result > 0 and result or nil
+end
+
 for id, q in pairs(quests) do
     local xp = questXP.db[id]
     out.quests[tostring(id)] = {
@@ -118,6 +128,7 @@ for id, q in pairs(quests) do
         parentQuest = q[QUEST.parentQuest],
         reputationReward = q[QUEST.reputationReward],
         breadcrumbForQuestId = q[QUEST.breadcrumbForQuestId],
+        objectiveItems = objectiveItems(q[QUEST.objectives]),
         xp = xp and xp[2] or nil,
     }
 end

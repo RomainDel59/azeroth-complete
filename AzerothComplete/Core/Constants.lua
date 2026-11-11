@@ -22,6 +22,7 @@ ns.Const = {
         REPUTATION = 15,    -- { { factionID, value }, ... }
         BREADCRUMB_FOR = 16,
         NAME_FALLBACK = 17, -- English name, used only when the client cannot provide one
+        CRAFT = 18,         -- skillLine of the profession that makes the item a crafting order asks for
     },
 
     QuestFlag = {

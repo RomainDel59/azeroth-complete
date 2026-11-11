@@ -195,13 +195,59 @@ for _, button in ipairs(questsView.details.widgets.button or {}) do
     if button:IsShown() then button:Click() end
 end
 
--- Tracking modes and faction switch
-frame.tracking:Select("account", true)
+-- Tracking modes and faction switch; the character filter only applies to the character.
+frame.tracking:Click()
+check(ns.Database:Settings().tracking == "account" and not frame.filter.available,
+    "the tracking switch goes to the account, where the character filter does not apply")
 frame.faction:Click()
 Stub.Advance(1)
-frame.tracking:Select("character", true)
+frame.tracking:Click()
+check(ns.Database:Settings().tracking == "character", "the tracking switch comes back to the character")
+check(not frame.filter.available, "the character filter does not apply to the other faction")
 frame.faction:Click()
+check(frame.filter.available, "the character filter applies to the character in its own faction")
 Stub.Advance(1)
+
+-- Character filter: the character (stub) knows Blacksmithing only.
+local Q = ns.Const.Quest
+local function questNeeding(predicate)
+    for questID, row in pairs(ns.Data.Quests) do
+        if predicate(row) and ns.Player:CanRace(row[Q.RACES]) and ns.Player:CanClass(row[Q.CLASSES]) then return questID end
+    end
+end
+local skinning = questNeeding(function(row) return row[Q.SKILL] and row[Q.SKILL][1] == 393 end)
+local smithing = questNeeding(function(row) return row[Q.SKILL] and row[Q.SKILL][1] == 164 end)
+local order = questNeeding(function(row) return row[Q.CRAFT] and row[Q.CRAFT] ~= 164 end)
+local alchemy = questNeeding(function(row) return row[Q.AREA] == -181 end)
+check(skinning and smithing and order and alchemy, "the data has quests needing professions")
+local possibleView = ns.MainFrame:View()
+check(possibleView.possible, "the character filter is active by default")
+check(not ns.Quests:IsVisible(skinning, possibleView), "a quest of an unlearned profession is hidden")
+check(ns.Quests:IsVisible(smithing, possibleView), "a quest of a learned profession is shown")
+check(not ns.Quests:IsVisible(order, possibleView), "a crafting order of an unlearned profession is hidden")
+check(not ns.Quests:IsVisible(alchemy, possibleView), "a quest of an unlearned profession category is hidden")
+ns.MainFrame:SelectTab("professions")
+local shownProfessions = ns.MainFrame.activeView.professions.items
+check(#shownProfessions == 1 and shownProfessions[1].skillLine == 164, "only the learned professions are listed")
+ns.MainFrame:SelectTab("quests")
+local filteredTotal = ns.Quests:Summary("test:skinning", { { skinning, smithing } }, possibleView).total
+frame.filter:Click()
+local everythingView = ns.MainFrame:View()
+check(not everythingView.possible and ns.Quests:IsVisible(skinning, everythingView),
+    "the filter switch shows the quests of every profession")
+check(ns.Quests:Summary("test:skinning", { { skinning, smithing } }, everythingView).total > filteredTotal,
+    "the counts follow the character filter")
+ns.MainFrame:SelectTab("professions")
+check(#ns.MainFrame.activeView.professions.items == #ns.Professions:List(), "every profession is listed without the filter")
+frame.filter:Click()
+ns.MainFrame:SelectTab("quests")
+
+-- Crafting orders: the rows drop the prefix that every title shares.
+local questName = ns.Names.Quest
+ns.Names.Quest = function(questID) return "Writ: Item " .. questID end
+local orders = ns.QuestWidgets.BuildItems(crafting.chains, everythingView, {})
+ns.Names.Quest = questName
+check(orders[1] and orders[1].prefix == "Writ: ", "the shared prefix of the titles is found")
 
 -- Professions: known spells were read
 check(ns.Database:Character().recipes[2660], "known recipes are read from the spellbook")

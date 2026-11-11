@@ -52,6 +52,12 @@ end
 function Professions:ReadRanks()
     local record = ns.Database:Character()
     local ranks = ns.Compat.GetProfessionRanks()
+    -- Without any skill read, the client API does not match: nothing is filtered on it.
+    self.ranksRead = next(ranks) ~= nil
+    if not self.ranksRead and not self.unreadLogged then
+        self.unreadLogged = true
+        ns.Log:Warn("No skill could be read from the client: professions are not used to filter")
+    end
     local result = {}
     for skillLine in pairs(ns.Data.Professions) do
         local name = ns.Names.SkillLine(skillLine)
@@ -199,6 +205,23 @@ function Professions:Known(tracking)
 end
 
 ns:RegisterMessage("AC_PROGRESS_CHANGED", function() mergedKnown = nil end)
+
+-- Whether the character has learned a profession; true when the skills cannot be read.
+function Professions:HasLearned(skillLine)
+    if not self.ranksRead then return true end
+    return ns.Database:Character().professions[skillLine] ~= nil
+end
+
+-- Professions shown in a view: in the character filter, only the learned ones.
+function Professions:Shown(view)
+    local list = self:List()
+    if not ns.Quests:UsesCharacterFilter(view) then return list end
+    local shown = {}
+    for _, profession in ipairs(list) do
+        if self:HasLearned(profession.skillLine) then shown[#shown + 1] = profession end
+    end
+    return shown
+end
 
 -- Best rank of a profession in a tracking mode: { rank, maxRank } or nil.
 function Professions:Rank(skillLine, tracking)

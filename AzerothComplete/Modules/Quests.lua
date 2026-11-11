@@ -28,6 +28,9 @@ local function changed()
     ns:SendMessageDelayed("AC_PROGRESS_CHANGED", 0.3)
 end
 
+-- Other progress, such as a profession learned, changes what the character can do.
+ns:RegisterMessage("AC_PROGRESS_CHANGED", function() statsCache = {} end)
+
 local MAX_SNAPSHOT_RETRIES = 3
 local snapshotRetries = 0
 
@@ -80,11 +83,14 @@ ns:RegisterEvent("QUEST_REMOVED", logChanged)
 -- Views
 -------------------------------------------------------------------------------
 
--- Returns the view of the current settings: { tracking, faction, key }.
+-- Returns the view of the current settings: { tracking, faction, possible, key }.
 function Quests:CurrentView(faction)
-    local tracking = ns.Database:Settings().tracking
+    local settings = ns.Database:Settings()
+    local tracking = settings.tracking
     faction = faction or ns.Player.faction
-    return { tracking = tracking, faction = faction, key = tracking .. ":" .. tostring(faction) }
+    local possible = settings.possibleOnly ~= false
+    return { tracking = tracking, faction = faction, possible = possible,
+        key = tracking .. ":" .. tostring(faction) .. ":" .. (possible and "possible" or "all") }
 end
 
 local function completedSet(view)
@@ -101,18 +107,32 @@ local function completedSet(view)
     return mergedCompleted
 end
 
--- The character's own race and class apply in the character view of its own faction;
--- otherwise only the faction matters.
-local function usesCharacterFilter(view)
-    return view.tracking == Tracking.CHARACTER and view.faction == ns.Player.faction
+-- What the character can do (its race, class and professions) limits the character view of
+-- its own faction, unless the "show everything" switch is on; otherwise only the faction
+-- matters.
+function Quests:UsesCharacterFilter(view)
+    return view.possible and view.tracking == Tracking.CHARACTER and view.faction == ns.Player.faction
+end
+
+-- Profession a quest needs: its required skill, the profession that makes the item of a
+-- crafting order, or the profession of its category.
+function Quests.RequiredProfession(row)
+    local skill = (row[Q.SKILL] and row[Q.SKILL][1]) or row[Q.CRAFT]
+    if not skill and row[Q.AREA] < 0 then
+        local sort = ns.Data.QuestSorts[-row[Q.AREA]]
+        skill = sort and sort.skill
+    end
+    return skill and ns.Data.Professions[skill] and skill or nil
 end
 
 function Quests:IsVisible(questID, view)
     local row = ns.Data.Quests[questID]
     if not row then return false end
     local races = row[Q.RACES]
-    if usesCharacterFilter(view) then
+    if self:UsesCharacterFilter(view) then
+        local profession = Quests.RequiredProfession(row)
         return ns.Player:CanRace(races) and ns.Player:CanClass(row[Q.CLASSES])
+            and (not profession or ns.Professions:HasLearned(profession))
     end
     return races == 0 or ns.MasksIntersect(races, ns.Player:FactionRaces(view.faction))
 end

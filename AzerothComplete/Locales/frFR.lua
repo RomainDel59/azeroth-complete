@@ -23,6 +23,15 @@ ns:RegisterLocale("frFR", {
     TRACKING_LABEL = "Suivi :",
     TRACKING_ACCOUNT = "Compte",
     TRACKING_CHARACTER = "Personnage",
+    TRACKING_TOOLTIP_CHARACTER = "Progression de ce personnage. Cliquez pour afficher la progression de tout le compte.",
+    TRACKING_TOOLTIP_ACCOUNT = "Progression de tous les personnages du compte. Cliquez pour n'afficher que ce personnage.",
+    FILTER_LABEL = "Affichage :",
+    FILTER_POSSIBLE = "À sa portée",
+    FILTER_EVERYTHING = "Tout",
+    FILTER_TOOLTIP_POSSIBLE = "Seulement ce que ce personnage peut faire : sa race, sa classe et les métiers qu'il a appris. Cliquez pour tout afficher.",
+    FILTER_TOOLTIP_EVERYTHING = "Tout ce qui concerne la faction, quoi que ce personnage puisse faire. Cliquez pour ne garder que ce qui est à sa portée.",
+    FILTER_UNAVAILABLE = "Ce filtre s'applique à la progression du personnage, dans sa propre faction.",
+    NO_PROFESSION_LEARNED = "Ce personnage n'a appris aucun métier.",
 
     -- Commun
     LOADING = "...",
