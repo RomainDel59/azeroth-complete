@@ -109,6 +109,22 @@ function Collections:Entries(kind)
     if cache[kind] then return cache[kind] end
     local entries = ns:SafeCall("Collections." .. kind, readers[kind])
     if entries then
+        -- A client API that returns its values in another order than expected puts something
+        -- else than a text in the name: such entries are left out and reported.
+        local valid, rejected = {}, nil
+        for _, entry in ipairs(entries) do
+            if type(entry.name) == "string" then
+                valid[#valid + 1] = entry
+            else
+                rejected = rejected or { count = 0, id = entry.id, type = type(entry.name) }
+                rejected.count = rejected.count + 1
+            end
+        end
+        if rejected then
+            ns.Log:Warn("Collection %s: %d entries without a text name (first: id %s, name is a %s)",
+                kind, rejected.count, tostring(rejected.id), rejected.type)
+        end
+        entries = valid
         table.sort(entries, function(a, b)
             if a.collected ~= b.collected then return not a.collected end
             return a.name < b.name
