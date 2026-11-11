@@ -102,7 +102,7 @@ local function clickRows(list, count)
     end
 end
 
-for _, tab in ipairs({ "quests", "professions", "toys", "dungeons", "raids", "achievements", "collections" }) do
+for _, tab in ipairs({ "quests", "professions", "dungeons", "raids", "achievements", "collections" }) do
     ns.MainFrame:SelectTab(tab)
     local active = ns.MainFrame.activeView
     check(active and active.frame:IsShown(), "tab %s shows its view", tab)
@@ -172,9 +172,30 @@ C_PetJournal.GetPetInfoBySpeciesID = getPetInfo
 ns.Collections:Invalidate("pets")
 check(pets and #pets > 0, "a collection keeps its valid entries when one name is not a text")
 
+-- Every tab is laid out on the shared page; the cards of a list show different artwork.
+for _, tab in ipairs({ "quests", "professions", "dungeons", "raids", "achievements", "collections" }) do
+    ns.MainFrame:SelectTab(tab)
+    local active = ns.MainFrame.activeView
+    check(active.page and active.page.groups and active.page.items and active.page.banner and active.page.filters,
+        "tab %s is laid out on the shared page", tab)
+    local seen, repeated = {}, nil
+    for _, row in ipairs(active.page.groups.rows) do
+        local request = row:IsShown() and row.art.request
+        if request and request.kind == "file" then
+            if seen[request.fileID] then repeated = request.fileID end
+            seen[request.fileID] = true
+        end
+    end
+    check(not repeated, "tab %s shows each artwork once in its list (%s repeated)", tab, tostring(repeated))
+end
+ns.MainFrame:SelectTab("collections")
+local listsToys = false
+for _, kind in ipairs(ns.MainFrame.activeView.kinds.items) do if kind == "toys" then listsToys = true end end
+check(listsToys, "the toy box is a kind of the collections tab")
+
 -- Every tab has content
 local expectations = {
-    professions = "recipes", dungeons = "entries", raids = "entries", toys = "entries",
+    professions = "recipes", dungeons = "entries", raids = "entries",
     collections = "entries", achievements = "achievements",
 }
 for tab, listKey in pairs(expectations) do
@@ -291,7 +312,7 @@ check(doneTodo == 0 and doneDone == allDone, "the done filter lists only the com
 check(ns.Database:Settings().listFilters.quests == "done", "the state filter of a list is remembered")
 check(ns.Quests:Summary("zone:12", elwynn.chains, possibleView).done == before, "the state filter keeps the counts")
 filter.buttons[1]:Click()
-for _, tab in ipairs({ "professions", "toys", "dungeons", "raids", "achievements", "collections" }) do
+for _, tab in ipairs({ "professions", "dungeons", "raids", "achievements", "collections" }) do
     ns.MainFrame:SelectTab(tab)
     local stateFilter = ns.MainFrame.activeView.filters
     check(stateFilter and stateFilter.Keeps, "tab %s offers the state filter", tab)

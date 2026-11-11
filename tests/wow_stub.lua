@@ -268,6 +268,12 @@ C_TooltipInfo = { GetHyperlink = function(link)
     return { lines = {} }
 end }
 
+local CLASS_NAMES = { "Warrior", "Paladin", "Hunter", "Rogue", "Priest", "Death Knight", "Shaman", "Mage", "Warlock", "Monk", "Druid" }
+function GetClassInfo(classID)
+    local name = CLASS_NAMES[classID]
+    if name then return name, name:upper():gsub(" ", ""), classID end
+end
+
 function GetProfessions() return 1, nil end
 function GetProfessionInfo() return "Blacksmithing", 136241, 75, 150, 0, 0, 164 end
 

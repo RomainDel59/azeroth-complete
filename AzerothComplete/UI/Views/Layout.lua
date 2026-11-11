@@ -1,5 +1,4 @@
--- Three-column layout shared by the views: navigation on the left, the main content in the
--- middle, details on the right.
+-- Layout shared by the views: three columns, the summary banner and the page of a tab.
 
 local _, ns = ...
 
@@ -47,7 +46,10 @@ function Layout.Title(panel, text, size, align)
     return title
 end
 
--- Summary banner: artwork, name, subtitle, progress ring and a caption under the name.
+-- Summary banner, as high as its three lines of text: the name, a subtitle and a caption over
+-- the artwork, the progress ring on the right.
+Layout.BANNER_HEIGHT = 96
+
 function Layout.Banner(parent, height)
     local banner = CreateFrame("Frame", nil, parent)
     banner:SetHeight(height)
@@ -58,15 +60,78 @@ function Layout.Banner(parent, height)
     local overlay = banner.art.overlay
     UI.Border(overlay, ns.Theme.colors.border)
     banner.name = UI.Text(overlay, 20, ns.Theme.colors.gold, "body")
-    banner.name:SetPoint("TOPLEFT", 16, -16)
-    banner.name:SetPoint("TOPRIGHT", -150, -16)
+    banner.name:SetPoint("TOPLEFT", 16, -14)
+    banner.name:SetPoint("TOPRIGHT", -(height + 8), -14)
     banner.subtitle = UI.Text(overlay, 13, ns.Theme.colors.text)
     banner.subtitle:SetPoint("TOPLEFT", banner.name, "BOTTOMLEFT", 0, -6)
     banner.subtitle:SetPoint("TOPRIGHT", banner.name, "BOTTOMRIGHT", 0, -6)
     banner.caption = UI.Text(overlay, 15, ns.Theme.colors.text)
     banner.caption:SetPoint("BOTTOMLEFT", 16, 14)
-    banner.caption:SetPoint("BOTTOMRIGHT", -150, 14)
-    banner.ring = UI.ProgressRing(overlay, math.min(130, height - 20))
-    banner.ring:SetPoint("RIGHT", -16, 0)
+    banner.caption:SetPoint("BOTTOMRIGHT", -(height + 8), 14)
+    banner.ring = UI.ProgressRing(overlay, height - 12)
+    banner.ring:SetPoint("RIGHT", -12, 0)
     return banner
+end
+
+-- Page of every tab, laid out as the quests tab: the groups on the left (title, optional
+-- controls, search, cards), the selected group in the middle (title, banner, then the
+-- details of the selected item), the items of the group on the right (title, search, state
+-- filter, list, count). Views fill it; they do not lay out their own widgets.
+--
+-- `spec`: groupsTitle, groupSearch, onGroupSearch(text), controlsHeight and
+-- buildControls(left, top) for widgets above the search, buildGroup(row) and
+-- fillGroup(row, group) for the cards, detailsTitle, itemSearch, onItemSearch(text),
+-- filterKey and onFilter() for the state filter, itemHeight, buildItem(row),
+-- fillItem(row, item) and itemSpacing for the item rows.
+function Layout.Page(frame, spec)
+    local C = ns.Theme.colors
+    local page = {}
+    local left, center, right = Layout.Columns(frame)
+    page.left, page.center, page.right = left, center, right
+
+    -- Left: the groups
+    page.groupsTitle = Layout.Title(left, spec.groupsTitle, 20, "LEFT")
+    page.groupsCount = UI.Text(left, 13, C.gold, "body", "RIGHT")
+    page.groupsCount:SetPoint("TOPRIGHT", -16, -20)
+    local top = -48
+    if spec.buildControls then
+        spec.buildControls(left, top)
+        top = top - spec.controlsHeight
+    end
+    page.groupSearch = UI.SearchBox(left, spec.groupSearch, spec.onGroupSearch)
+    page.groupSearch:SetPoint("TOPLEFT", 16, top)
+    page.groupSearch:SetPoint("TOPRIGHT", -16, top)
+    page.groups = UI.ScrollList(left, UI.ART_CARD_HEIGHT, spec.buildGroup, spec.fillGroup, 6)
+    page.groups:SetPoint("TOPLEFT", 16, top - 36)
+    page.groups:SetPoint("BOTTOMRIGHT", -8, 12)
+
+    -- Middle: the selected group and the selected item
+    page.title = UI.Text(center, 26, C.gold, "fancy", "CENTER")
+    page.title:SetPoint("TOPLEFT", 12, -14)
+    page.title:SetPoint("TOPRIGHT", -12, -14)
+    page.banner = Layout.Banner(center, Layout.BANNER_HEIGHT)
+    page.banner:SetPoint("TOPLEFT", 16, -52)
+    page.banner:SetPoint("TOPRIGHT", -16, -52)
+    local detailBox = UI.Panel(center, C.panelDark, C.borderDim)
+    detailBox:SetPoint("TOPLEFT", page.banner, "BOTTOMLEFT", 0, -14)
+    detailBox:SetPoint("BOTTOMRIGHT", -16, 14)
+    page.detailsTitle = UI.Heading(detailBox, 16, spec.detailsTitle, "fancy")
+    page.detailsTitle:SetPoint("TOP", 0, -10)
+    page.details = UI.DetailPanel(detailBox)
+    page.details:SetPoint("TOPLEFT", 14, -36)
+    page.details:SetPoint("BOTTOMRIGHT", -8, 10)
+
+    -- Right: the items of the group
+    page.itemsTitle = Layout.Title(right, "", 18)
+    page.itemSearch = UI.SearchBox(right, spec.itemSearch, spec.onItemSearch)
+    page.itemSearch:SetPoint("TOPLEFT", 14, -44)
+    page.itemSearch:SetPoint("TOPRIGHT", -14, -44)
+    page.filters = UI.StateFilter(right, spec.filterKey, spec.onFilter)
+    page.filters:SetPoint("TOPLEFT", 14, -74)
+    page.items = UI.ScrollList(right, spec.itemHeight or 34, spec.buildItem, spec.fillItem, spec.itemSpacing or 4)
+    page.items:SetPoint("TOPLEFT", 14, -104)
+    page.items:SetPoint("BOTTOMRIGHT", -6, 36)
+    page.footer = UI.Text(right, 12, C.text, "body", "CENTER")
+    page.footer:SetPoint("BOTTOM", 0, 12)
+    return page
 end

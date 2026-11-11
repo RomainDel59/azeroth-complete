@@ -1,5 +1,6 @@
--- Professions tab: professions on the left, the recipe catalogue in the middle, the
--- selected recipe (reagents and how to obtain it) on the right.
+-- Professions tab, on the page of every tab: professions on the left, the selected
+-- profession and recipe (reagents and how to obtain it) in the middle, the recipe catalogue
+-- on the right.
 
 local _, ns = ...
 
@@ -26,15 +27,8 @@ end
 -- Rows
 -------------------------------------------------------------------------------
 
-local function buildProfessionRow(row)
-    UI.DecorateRow(row)
-    row.icon = UI.FramedIcon(row, 30)
-    row.icon:SetPoint("LEFT", 8, 0)
-    row.name = UI.Text(row, 14)
-    row.name:SetPoint("LEFT", row.icon, "RIGHT", 10, 0)
-    row.count = UI.Text(row, 13, C.gold, "body", "RIGHT")
-    row.count:SetPoint("RIGHT", -10, 0)
-    row.name:SetPoint("RIGHT", row.count, "LEFT", -6, 0)
+local function buildProfessionCard(row)
+    UI.ArtCard(row)
 end
 
 local function buildRecipeRow(row)
@@ -53,47 +47,32 @@ end
 -------------------------------------------------------------------------------
 
 function View:Build(frame)
-    self.query = ""
-    local left, center, right = Layout.Columns(frame, 300, 380)
-
-    Layout.Title(left, L.PROFESSIONS_TITLE, 20, "LEFT")
-    local subtitle = UI.Text(left, 12, C.text)
-    subtitle:SetPoint("TOPLEFT", 16, -40)
-    subtitle:SetText(L.PROFESSIONS_SUBTITLE)
-    self.professions = UI.ScrollList(left, 44, buildProfessionRow, function(row, profession)
-        self:FillProfessionRow(row, profession)
-    end, 6)
-    self.professions:SetPoint("TOPLEFT", 16, -64)
-    self.professions:SetPoint("BOTTOMRIGHT", -8, 12)
-
-    self.title = UI.Text(center, 26, C.gold, "fancy", "CENTER")
-    self.title:SetPoint("TOPLEFT", 12, -14)
-    self.title:SetPoint("TOPRIGHT", -12, -14)
-    self.rank = UI.Text(center, 14, C.green, "body", "CENTER")
-    self.rank:SetPoint("TOP", self.title, "BOTTOM", 0, -6)
-    self.catalogue = UI.Text(center, 16, C.gold)
-    self.catalogue:SetPoint("TOPLEFT", 18, -84)
-
-    self.filters = UI.StateFilter(center, "recipes", function() self:RefreshRecipes() end)
-    self.filters:SetPoint("TOPLEFT", 18, -112)
-    local search = UI.SearchBox(center, L.SEARCH_RECIPE, function(text)
-        self.query = text
-        self:RefreshRecipes()
-    end)
-    search:SetPoint("LEFT", self.filters, "RIGHT", 10, 0)
-    search:SetPoint("TOPRIGHT", center, "TOPRIGHT", -18, -112)
-    search:SetHeight(22)
-
-    self.recipes = UI.ScrollList(center, 34, buildRecipeRow, function(row, recipe) self:FillRecipeRow(row, recipe) end, 3)
-    self.recipes:SetPoint("TOPLEFT", 18, -144)
-    self.recipes:SetPoint("BOTTOMRIGHT", -8, 34)
-    self.recipeCount = UI.Text(center, 12, C.text, "body", "CENTER")
-    self.recipeCount:SetPoint("BOTTOM", 0, 12)
-
-    Layout.Title(right, L.RECIPE_DETAILS, 20)
-    self.details = UI.DetailPanel(right)
-    self.details:SetPoint("TOPLEFT", 16, -50)
-    self.details:SetPoint("BOTTOMRIGHT", -8, 12)
+    self.query, self.professionQuery = "", ""
+    local page = Layout.Page(frame, {
+        groupsTitle = L.PROFESSIONS_TITLE,
+        groupSearch = L.SEARCH,
+        onGroupSearch = function(text)
+            self.professionQuery = text
+            self:Refresh()
+        end,
+        buildGroup = buildProfessionCard,
+        fillGroup = function(row, profession) self:FillProfessionRow(row, profession) end,
+        detailsTitle = L.SELECTED_RECIPE,
+        itemSearch = L.SEARCH_RECIPE,
+        onItemSearch = function(text)
+            self.query = text
+            self:RefreshRecipes()
+        end,
+        filterKey = "recipes",
+        onFilter = function() self:RefreshRecipes() end,
+        buildItem = buildRecipeRow,
+        fillItem = function(row, recipe) self:FillRecipeRow(row, recipe) end,
+        itemSpacing = 3,
+    })
+    self.page = page
+    self.professions, self.recipes, self.filters = page.groups, page.items, page.filters
+    self.title, self.banner, self.details = page.title, page.banner, page.details
+    self.recipesTitle, self.recipeCount = page.itemsTitle, page.footer
 end
 
 -------------------------------------------------------------------------------
@@ -102,19 +81,15 @@ end
 
 function View:FillProfessionRow(row, profession)
     local tracking = ns.Database:Settings().tracking
-    row.icon:SetIcon(profession.icon ~= 0 and profession.icon or nil)
     row.name:SetText(ns.Names.SkillLine(profession.skillLine) or ("#" .. profession.skillLine))
     local rank = ns.Professions:Rank(profession.skillLine, tracking)
-    if #profession.recipes == 0 then
-        row.count:SetText("")
-    elseif rank then
-        local summary = ns.Professions:Summary(profession.skillLine, self.known)
-        row.count:SetText(string.format("%d / %d", summary.done, summary.total))
-    else
-        row.count:SetText("-")
-    end
-    row.name:SetTextColor(Theme.Unpack(rank and C.text or C.textDim))
-    row:SetState(self.selected == profession.skillLine)
+    row.levels:SetText(rank and string.format(L.RANK_OF, rank.rank, rank.maxRank) or L.NOT_LEARNED)
+    local summary = ns.Professions:Summary(profession.skillLine, self.known)
+    local complete = summary.total > 0 and summary.done >= summary.total
+    row.count:SetText(#profession.recipes > 0 and string.format("%d / %d", summary.done, summary.total) or "")
+    row.count:SetTextColor(Theme.Unpack(complete and C.green or C.text))
+    if not row.art:SetArtwork(ns.Data.Artwork.professions[profession.skillLine]) then row.art:Clear() end
+    row.border:SetColor(self.selected == profession.skillLine and C.gold or (complete and C.greenBorder or C.borderDim))
     row:SetScript("OnClick", function()
         self.selected = profession.skillLine
         self.selectedRecipe = nil
@@ -251,6 +226,7 @@ function View:RefreshRecipes()
     local profession = self.selected and ns.Professions:Get(self.selected)
     if not profession then
         self.recipes:SetItems({})
+        self.recipeCount:SetText("")
         return
     end
     local items = {}
@@ -265,9 +241,13 @@ end
 function View:ShowEmpty()
     self.rankValue = nil
     self.title:SetText("")
-    self.rank:SetText(L.NO_PROFESSION_LEARNED)
-    self.rank:SetTextColor(Theme.Unpack(C.textDim))
-    self.catalogue:SetText("")
+    local banner = self.banner
+    banner.name:SetText("")
+    banner.subtitle:SetText(L.NO_PROFESSION_LEARNED)
+    banner.caption:SetText("")
+    banner.ring:SetProgress(0, 0, "")
+    banner.art:Clear()
+    self.recipesTitle:SetText(L.RECIPES:upper())
     self.recipes:SetItems({})
     self.recipeCount:SetText("")
     self:ShowRecipe(nil)
@@ -277,7 +257,10 @@ end
 function View:Refresh()
     local tracking = ns.Database:Settings().tracking
     self.known = ns.Professions:Known(tracking)
-    local list = ns.Professions:Shown(self.mainFrame:View())
+    local list = {}
+    for _, profession in ipairs(ns.Professions:Shown(self.mainFrame:View())) do
+        if UI.Matches(ns.Names.SkillLine(profession.skillLine) or "", self.professionQuery) then list[#list + 1] = profession end
+    end
     local listed = false
     for _, profession in ipairs(list) do
         if profession.skillLine == self.selected then listed = true end
@@ -303,11 +286,17 @@ function View:Refresh()
     local profession = ns.Professions:Get(self.selected)
     local rank = ns.Professions:Rank(self.selected, tracking)
     self.rankValue = rank and rank.rank
-    self.title:SetText(ns.Names.SkillLine(self.selected) or "")
-    self.rank:SetText(rank and string.format(L.CURRENT_RANK, rank.rank, rank.maxRank) or L.NOT_LEARNED)
-    self.rank:SetTextColor(Theme.Unpack(rank and C.green or C.textDim))
+    local name = ns.Names.SkillLine(self.selected) or ""
+    self.title:SetText(name)
     local summary = ns.Professions:Summary(self.selected, self.known)
-    self.catalogue:SetText(string.format(L.CATALOGUE_LINE, summary.total, summary.done):upper())
+    local banner = self.banner
+    banner.name:SetText(name:upper())
+    banner.subtitle:SetText(rank and string.format(L.CURRENT_RANK, rank.rank, rank.maxRank) or L.NOT_LEARNED)
+    local trackingName = tracking == ns.Const.Tracking.ACCOUNT and L.TRACKING_ACCOUNT or L.TRACKING_CHARACTER
+    banner.caption:SetText(string.format(L.RECIPES_CAPTION, summary.done, summary.total, trackingName))
+    banner.ring:SetProgress(summary.done, summary.total, summary.total > 0 and summary.done >= summary.total and L.COMPLETE or L.DONE)
+    if not banner.art:SetArtwork(ns.Data.Artwork.professions[self.selected]) then banner.art:Clear() end
+    self.recipesTitle:SetText(string.format(L.RECIPES_OF, name):upper())
     self:RefreshRecipes()
 
     local selectedRecipe

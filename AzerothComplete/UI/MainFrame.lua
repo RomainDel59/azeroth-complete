@@ -24,7 +24,6 @@ ns.Views = ns.Views or {}
 local TABS = {
     { id = "quests", global = "QUESTS_LABEL", label = "TAB_QUESTS", icon = "quests", view = "Quests" },
     { id = "professions", global = "TRADE_SKILLS", label = "TAB_PROFESSIONS", icon = "professions", view = "Professions" },
-    { id = "toys", label = "TAB_TOYS", icon = "toys", view = "Toys" },
     { id = "dungeons", global = "DUNGEONS", label = "TAB_DUNGEONS", icon = "dungeons", view = "Dungeons" },
     { id = "raids", global = "RAIDS", label = "TAB_RAIDS", icon = "raids", view = "Raids" },
     { id = "achievements", global = "LEGACY_CHALLENGE_FRAME_TITLE", label = "TAB_ACHIEVEMENTS", icon = "achievements", view = "Achievements" },

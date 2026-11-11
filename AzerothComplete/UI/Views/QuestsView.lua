@@ -70,70 +70,50 @@ end
 function View:Build(frame)
     self.expanded = {}
     self.query = ""
-    local left, center, right = Layout.Columns(frame)
-
-    -- Left: zones
-    Layout.Title(left, L.ZONES, 20, "LEFT")
-    local groupButtons = {}
-    local buttonWidth = math.floor((Layout.LEFT_WIDTH - 32 - 6) / 2)
-    for index, option in ipairs(GROUP_BUTTONS) do
-        local button = UI.Button(left, buttonWidth, 26, L[option.label], function() self:SelectContinent(option.value) end)
-        local column, line = (index - 1) % 2, math.floor((index - 1) / 2)
-        button:SetPoint("TOPLEFT", 16 + column * (buttonWidth + 6), -48 - line * 32)
-        button.value = option.value
-        groupButtons[#groupButtons + 1] = button
-    end
-    self.groupButtons = groupButtons
-
-    local search = UI.SearchBox(left, L.SEARCH_ZONE, function(text)
-        self.zoneQuery = text
-        self:RefreshZones()
-    end)
-    search:SetPoint("TOPLEFT", 16, -116)
-    search:SetPoint("TOPRIGHT", -16, -116)
-
-    self.zones = UI.ScrollList(left, UI.ART_CARD_HEIGHT, buildZoneCard, function(row, group) self:FillZoneCard(row, group) end, 6)
-    self.zones:SetPoint("TOPLEFT", 16, -152)
-    self.zones:SetPoint("BOTTOMRIGHT", -8, 12)
-
-    -- Center: summary and selected quest
-    self.centerTitle = UI.Text(center, 26, C.gold, "fancy", "CENTER")
-    self.centerTitle:SetPoint("TOPLEFT", 12, -14)
-    self.centerTitle:SetPoint("TOPRIGHT", -12, -14)
-    self.banner = Layout.Banner(center, 150)
-    self.banner:SetPoint("TOPLEFT", 16, -52)
-    self.banner:SetPoint("TOPRIGHT", -16, -52)
-
-    local detailBox = UI.Panel(center, C.panelDark, C.borderDim)
-    detailBox:SetPoint("TOPLEFT", self.banner, "BOTTOMLEFT", 0, -14)
-    detailBox:SetPoint("BOTTOMRIGHT", -16, 14)
-    local detailTitle = UI.Heading(detailBox, 16, L.SELECTED_QUEST, "fancy")
-    detailTitle:SetPoint("TOP", 0, -10)
-    self.details = UI.DetailPanel(detailBox)
-    self.details:SetPoint("TOPLEFT", 14, -36)
-    self.details:SetPoint("BOTTOMRIGHT", -8, 10)
-
-    -- Right: quests of the zone
-    self.rightTitle = Layout.Title(right, "", 18)
-    local questSearch = UI.SearchBox(right, L.SEARCH_QUEST, function(text)
-        self.query = text
-        self:RefreshQuests()
-    end)
-    questSearch:SetPoint("TOPLEFT", 14, -44)
-    questSearch:SetPoint("TOPRIGHT", -14, -44)
-    self.stateFilter = UI.StateFilter(right, "quests", function()
-        self.quests.offset = 0
-        self:RefreshQuests()
-    end)
-    self.stateFilter:SetPoint("TOPLEFT", 14, -74)
-    self.quests = UI.ScrollList(right, 34, QuestWidgets.BuildRow, function(row, item)
-        QuestWidgets.FillRow(row, item, self.mainFrame:View(), self.selectedQuest)
-        row:SetScript("OnClick", function() self:OnQuestClick(item) end)
-    end, 4)
-    self.quests:SetPoint("TOPLEFT", 14, -104)
-    self.quests:SetPoint("BOTTOMRIGHT", -6, 36)
-    self.questFooter = UI.Text(right, 12, C.text, "body", "CENTER")
-    self.questFooter:SetPoint("BOTTOM", 0, 12)
+    local page = Layout.Page(frame, {
+        groupsTitle = L.ZONES,
+        -- The continent buttons, two per line, above the zone search.
+        controlsHeight = 68,
+        buildControls = function(left, top)
+            local groupButtons = {}
+            local buttonWidth = math.floor((Layout.LEFT_WIDTH - 32 - 6) / 2)
+            for index, option in ipairs(GROUP_BUTTONS) do
+                local button = UI.Button(left, buttonWidth, 26, L[option.label], function() self:SelectContinent(option.value) end)
+                local column, line = (index - 1) % 2, math.floor((index - 1) / 2)
+                button:SetPoint("TOPLEFT", 16 + column * (buttonWidth + 6), top - line * 32)
+                button.value = option.value
+                groupButtons[#groupButtons + 1] = button
+            end
+            self.groupButtons = groupButtons
+        end,
+        groupSearch = L.SEARCH_ZONE,
+        onGroupSearch = function(text)
+            self.zoneQuery = text
+            self:RefreshZones()
+        end,
+        buildGroup = buildZoneCard,
+        fillGroup = function(row, group) self:FillZoneCard(row, group) end,
+        detailsTitle = L.SELECTED_QUEST,
+        itemSearch = L.SEARCH_QUEST,
+        onItemSearch = function(text)
+            self.query = text
+            self:RefreshQuests()
+        end,
+        filterKey = "quests",
+        onFilter = function()
+            self.quests.offset = 0
+            self:RefreshQuests()
+        end,
+        buildItem = QuestWidgets.BuildRow,
+        fillItem = function(row, item)
+            QuestWidgets.FillRow(row, item, self.mainFrame:View(), self.selectedQuest)
+            row:SetScript("OnClick", function() self:OnQuestClick(item) end)
+        end,
+    })
+    self.page = page
+    self.zones, self.quests, self.stateFilter = page.groups, page.items, page.filters
+    self.centerTitle, self.banner, self.details = page.title, page.banner, page.details
+    self.rightTitle, self.questFooter = page.itemsTitle, page.footer
 
     self:SelectContinent(self:InitialContinent(), true)
 end

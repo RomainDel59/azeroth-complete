@@ -202,7 +202,6 @@ function UI.Button(parent, width, height, label, onClick)
     return button
 end
 
--- Tab button: icon + label.
 -- State filter of an item list: everything, what remains to do, what is done. Every item
 -- list offers it with the same labels, in front of its search box; it only narrows the list,
 -- never the counts. The choice is remembered per list under `key`.
@@ -275,6 +274,7 @@ function UI.Toggle(parent, label, onClick)
     return toggle
 end
 
+-- Tab button: icon + label.
 function UI.TabButton(parent, width, height, icon, label, onClick)
     local button = UI.Button(parent, width, height, label, onClick)
     button.icon = UI.FramedIcon(button, height - 8)
@@ -549,6 +549,14 @@ function UI.Art(parent)
     function frame.SetLoadingScreen(_, fileID, framed)
         if framed then return frame:SetFile(fileID, 4 / 3, 0.23, 0.79) end
         return frame:SetFile(fileID, 16 / 9)
+    end
+
+    -- Shows the artwork described by the data: { art, artFramed } for a loading screen,
+    -- { art, artRatio } for another picture such as a talent background.
+    function frame.SetArtwork(_, entry)
+        if not (entry and entry.art and entry.art ~= 0) then return false end
+        if entry.artRatio then return frame:SetFile(entry.art, entry.artRatio) end
+        return frame:SetLoadingScreen(entry.art, entry.artFramed)
     end
 
     frame:SetScript("OnSizeChanged", function()

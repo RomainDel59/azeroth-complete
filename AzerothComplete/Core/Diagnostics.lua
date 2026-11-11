@@ -20,6 +20,7 @@ local PROBES = {
     { "Known spells", "C_SpellBook.IsSpellKnown|IsPlayerSpell|IsSpellKnown" },
     { "Professions", "GetProfessions|GetNumSkillLines" },
     { "Area names", "C_Map.GetAreaInfo" },
+    { "Class names", "GetClassInfo" },
     { "Map art", "C_Map.GetMapArtLayerTextures" },
     { "Player map", "C_Map.GetBestMapForUnit" },
     { "Map hierarchy", "C_Map.GetMapInfo" },

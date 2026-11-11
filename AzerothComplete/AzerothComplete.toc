@@ -27,6 +27,7 @@ Data\Entities.lua
 Data\Professions.lua
 Data\Instances.lua
 Data\Collections.lua
+Data\Artwork.lua
 Data\Strings.enUS.lua
 Data\Strings.frFR.lua
 

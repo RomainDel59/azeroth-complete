@@ -179,6 +179,14 @@ end
 -- Places and factions
 -------------------------------------------------------------------------------
 
+-- Localized name of a class, from its id.
+function Compat.GetClassName(classID)
+    if not GetClassInfo then return nil end
+    local name = GetClassInfo(classID)
+    if name and name ~= "" then return name end
+    return nil
+end
+
 function Compat.GetAreaName(areaID)
     if C_Map and C_Map.GetAreaInfo then
         local name = C_Map.GetAreaInfo(areaID)

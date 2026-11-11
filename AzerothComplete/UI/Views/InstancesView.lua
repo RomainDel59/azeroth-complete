@@ -1,5 +1,6 @@
--- Dungeons and Raids tabs: instances on the left, the instance summary with its bosses and
--- quests in the middle, the selected boss or quest on the right.
+-- Dungeons and Raids tabs, on the page of every tab: instances on the left, the instance
+-- summary and the selected boss or quest in the middle, the bosses and quests of the
+-- instance on the right.
 
 local _, ns = ...
 
@@ -26,37 +27,33 @@ local function newView(kind)
 
     function View:Build(frame)
         self.expanded = {}
-        local left, center, right = Layout.Columns(frame)
-
-        Layout.Title(left, kind == Kind.RAID and L.RAIDS or L.DUNGEONS, 20, "LEFT")
-        local search = UI.SearchBox(left, L.SEARCH_INSTANCE, function(text)
-            self.query = text
-            self:Refresh()
-        end)
-        search:SetPoint("TOPLEFT", 16, -48)
-        search:SetPoint("TOPRIGHT", -16, -48)
-        self.instances = UI.ScrollList(left, UI.ART_CARD_HEIGHT, buildInstanceCard, function(row, instance)
-            self:FillCard(row, instance)
-        end, 6)
-        self.instances:SetPoint("TOPLEFT", 16, -86)
-        self.instances:SetPoint("BOTTOMRIGHT", -8, 12)
-
-        self.title = UI.Text(center, 26, C.gold, "fancy", "CENTER")
-        self.title:SetPoint("TOPLEFT", 12, -14)
-        self.title:SetPoint("TOPRIGHT", -12, -14)
-        self.banner = Layout.Banner(center, 150)
-        self.banner:SetPoint("TOPLEFT", 16, -52)
-        self.banner:SetPoint("TOPRIGHT", -16, -52)
-        self.filters = UI.StateFilter(center, kind == Kind.RAID and "raids" or "dungeons", function() self:Refresh() end)
-        self.filters:SetPoint("TOPLEFT", self.banner, "BOTTOMLEFT", 0, -10)
-        self.entries = UI.ScrollList(center, 32, buildEntryRow, function(row, item) self:FillEntry(row, item) end, 3)
-        self.entries:SetPoint("TOPLEFT", self.filters, "BOTTOMLEFT", 0, -8)
-        self.entries:SetPoint("BOTTOMRIGHT", -8, 14)
-
-        Layout.Title(right, L.DETAILS, 20)
-        self.details = UI.DetailPanel(right)
-        self.details:SetPoint("TOPLEFT", 16, -50)
-        self.details:SetPoint("BOTTOMRIGHT", -8, 12)
+        self.query, self.entryQuery = "", ""
+        local page = Layout.Page(frame, {
+            groupsTitle = kind == Kind.RAID and L.RAIDS or L.DUNGEONS,
+            groupSearch = L.SEARCH_INSTANCE,
+            onGroupSearch = function(text)
+                self.query = text
+                self:Refresh()
+            end,
+            buildGroup = buildInstanceCard,
+            fillGroup = function(row, instance) self:FillCard(row, instance) end,
+            detailsTitle = L.SELECTED_ENTRY,
+            itemSearch = L.SEARCH,
+            onItemSearch = function(text)
+                self.entryQuery = text
+                self:Refresh()
+            end,
+            filterKey = kind == Kind.RAID and "raids" or "dungeons",
+            onFilter = function() self:Refresh() end,
+            itemHeight = 32,
+            buildItem = buildEntryRow,
+            fillItem = function(row, item) self:FillEntry(row, item) end,
+            itemSpacing = 3,
+        })
+        self.page = page
+        self.instances, self.entries, self.filters = page.groups, page.items, page.filters
+        self.title, self.banner, self.details = page.title, page.banner, page.details
+        self.entriesTitle, self.count = page.itemsTitle, page.footer
     end
 
     function View:FillCard(row, instance)
@@ -76,19 +73,22 @@ local function newView(kind)
         end)
     end
 
-    -- Entries of the middle list: a bosses header and bosses, then a quests header and quests.
+    -- Entries of the list: a bosses header and bosses, then a quests header and quests.
     function View:BuildEntries(instance, view)
         local items = {}
         local defeated = ns.Instances:Defeated(view.tracking)
         local bosses = {}
         for _, encounterID in ipairs(instance.bosses) do
-            if self.filters:Keeps(defeated[encounterID]) then bosses[#bosses + 1] = { kind = "boss", id = encounterID } end
+            if self.filters:Keeps(defeated[encounterID])
+                and UI.Matches(ns.Names.Encounter(encounterID) or "", self.entryQuery) then
+                bosses[#bosses + 1] = { kind = "boss", id = encounterID }
+            end
         end
         if #bosses > 0 then
             items[#items + 1] = { kind = "header", text = L.BOSSES }
             for _, boss in ipairs(bosses) do items[#items + 1] = boss end
         end
-        local questItems = QuestWidgets.BuildItems(instance.chains, view, self.expanded, nil, self.filters)
+        local questItems = QuestWidgets.BuildItems(instance.chains, view, self.expanded, self.entryQuery, self.filters)
         if #questItems > 0 then
             items[#items + 1] = { kind = "header", text = L.QUESTS }
             for _, item in ipairs(questItems) do items[#items + 1] = item end
@@ -161,6 +161,8 @@ local function newView(kind)
         local instance = self.selected
         if not instance then
             self.title:SetText("")
+            self.entriesTitle:SetText("")
+            self.count:SetText("")
             self.entries:SetItems({})
             self.details:Clear()
             self.details:Line(L.NO_INSTANCE, C.textDim)
@@ -180,7 +182,14 @@ local function newView(kind)
         banner.ring:SetProgress(summary.done, summary.total, summary.total > 0 and summary.done >= summary.total and L.COMPLETE or L.DONE)
         if not banner.art:SetLoadingScreen(instance.art, instance.artFramed) then banner.art:Clear() end
 
-        self.entries:SetItems(self:BuildEntries(instance, view), true)
+        self.entriesTitle:SetText(string.format(L.INSTANCE_ENTRIES_OF, name):upper())
+        local entries = self:BuildEntries(instance, view)
+        local listed = 0
+        for _, item in ipairs(entries) do
+            if item.kind ~= "header" then listed = listed + 1 end
+        end
+        self.entries:SetItems(entries, true)
+        self.count:SetText(string.format(L.ENTRIES_LISTED, listed))
         if self.selectedKind == "boss" and self.selectedEntry then
             self:ShowBoss(self.selectedEntry)
         elseif self.selectedKind == "quest" and self.selectedEntry then

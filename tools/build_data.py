@@ -114,6 +114,30 @@ CATEGORY_SCREENS = {
     16941: 70,     # Crafting: Uldaman, the titans' workshops
 }
 
+# Maps whose loading screen stands for each profession on the professions tab.
+PROFESSION_SCREENS = {
+    164: 230,   # Blacksmithing: Blackrock Depths, the Dark Iron forges
+    171: 289,   # Alchemy: Scholomance, its laboratories
+    165: 429,   # Leatherworking: Dire Maul, in Feralas
+    202: 90,    # Engineering: Gnomeregan
+    197: 329,   # Tailoring: Stratholme, its runecloth and felcloth
+    333: 109,   # Enchanting: the Sunken Temple
+    185: 36,    # Cooking: the Deadmines, a pirate ship galley
+    129: 189,   # First Aid: Scarlet Monastery
+    356: 48,    # Fishing: Blackfathom Deeps
+    182: 349,   # Herbalism: Maraudon, its overgrown caverns
+    186: 389,   # Mining: Ragefire Chasm, under Orgrimmar
+    393: 47,    # Skinning: Razorfen Kraul, among the quilboar and their beasts
+}
+# Maps whose loading screen stands for each kind of collection on the collections tab.
+COLLECTION_SCREENS = {
+    "mounts": 529,   # Arathi Basin, its stables
+    "pets": 43,      # Wailing Caverns
+    "toys": 37,      # Azshara Crater
+    "sets": 409,     # Molten Core, home of the first tier sets
+    "titles": 531,   # Temple of Ahn'Qiraj, the Scarab Lord
+}
+
 # Name markers of client rows that are not real content.
 JUNK_MARKERS = ("[DEPRECATED]", "<UNUSED>", "<NYI>", "<TXT>", "<TEST>", "[PH]", "<DO NOT USE>",
                 "REUSE", "[DNT]", "UNUSED", "DEPRECATED", "<CHANGE TO GOSSIP>", "ZZOLD", "zzOLD",
@@ -655,33 +679,75 @@ def category_screen(world: World, key: int) -> dict:
     return world.screen_art(file_id) if file_id else {}
 
 
+def class_backgrounds(world: World) -> dict[int, dict]:
+    """Talent background of each class: the top left part of its first talent tree, a
+    square of 256 pixels. Keys are class ids."""
+    classes = [to_int(r["ID"]) for r in read_table(world.cache, "ChrClasses")]
+    tabs = defaultdict(list)
+    for row in read_table(world.cache, "TalentTab"):
+        for class_id in classes:
+            if to_int(row["ClassMask"]) & (1 << (class_id - 1)) and row["BackgroundFile"]:
+                tabs[class_id].append((to_int(row["OrderIndex"]), row["BackgroundFile"]))
+    result = {}
+    for class_id, backgrounds in tabs.items():
+        for _, background in sorted(backgrounds):
+            file_id = world.shipped.file_id(f"interface/talentframe/{background}-topleft.blp")
+            if file_id and world.shipped(file_id):
+                result[class_id] = {"art": file_id, "artRatio": 1}
+                break
+    return result
+
+
 def category_art(world: World, sorts: dict) -> dict[int, dict]:
     """Artwork of the quest categories. A class category shows the talent background of the
     class, linked through the English names of the category and the class; any other shows
     the loading screen chosen for it."""
-    cache = world.cache
-    sort_names = {to_int(r["ID"]): r["SortName_lang"] for r in read_table(cache, "QuestSort", "enUS")}
-    classes = {r["Name_lang"]: to_int(r["ID"]) for r in read_table(cache, "ChrClasses")}
-    tabs = defaultdict(list)
-    for row in read_table(cache, "TalentTab"):
-        for class_id in classes.values():
-            if to_int(row["ClassMask"]) & (1 << (class_id - 1)) and row["BackgroundFile"]:
-                tabs[class_id].append((to_int(row["OrderIndex"]), row["BackgroundFile"]))
+    sort_names = {to_int(r["ID"]): r["SortName_lang"] for r in read_table(world.cache, "QuestSort", "enUS")}
+    class_ids = {r["Name_lang"]: to_int(r["ID"]) for r in read_table(world.cache, "ChrClasses")}
+    backgrounds = class_backgrounds(world)
     result = {}
     for sort_id in sorts:
-        for _, background in sorted(tabs.get(classes.get(sort_names.get(sort_id)), [])):
-            file_id = world.shipped.file_id(f"interface/talentframe/{background}-topleft.blp")
-            if file_id and world.shipped(file_id):
-                # The top left part of a talent background is a square of 256 pixels.
-                result[sort_id] = {"art": file_id, "artRatio": 1}
-                break
-        if sort_id not in result:
+        background = backgrounds.get(class_ids.get(sort_names.get(sort_id)))
+        if background:
+            result[sort_id] = dict(background)
+        else:
             result[sort_id] = category_screen(world, sort_id)
             if sort_id not in CATEGORY_SCREENS:
                 log(f"WARNING: no place chosen for category {sort_id}")
     log(f"category artwork: {sum(1 for a in result.values() if a.get('artRatio'))} talent backgrounds, "
         f"{sum(1 for a in result.values() if a and not a.get('artRatio'))} chosen loading screens")
     return result
+
+
+def build_artwork(world: World, professions: dict, instances: dict) -> dict:
+    """Artwork of the groups listed on the left of the other tabs: the talent background of
+    each class, a loading screen chosen for each profession and collection kind, and a pool
+    of loading screens for the groups the client defines (Legacy challenge categories), so
+    that every card of a list shows a different picture."""
+    def screen(map_id: int) -> dict:
+        file_id = world.loading_screen(map_id)
+        if not file_id:
+            log(f"WARNING: the loading screen of map {map_id} is not shipped")
+        return world.screen_art(file_id) if file_id else {}
+
+    missing = sorted(set(professions) - set(PROFESSION_SCREENS))
+    if missing:
+        log(f"WARNING: no loading screen chosen for professions {missing}")
+    pool, seen = [], set()
+    for map_id in [0, 1] + sorted(instances):
+        entry = screen(map_id) if map_id in (0, 1) else (world.screen_art(instances[map_id]["art"]) if instances[map_id]["art"] else {})
+        if entry and entry["art"] not in seen:
+            seen.add(entry["art"])
+            pool.append(entry)
+    artwork = {
+        "classes": class_backgrounds(world),
+        "professions": {skill: screen(map_id) for skill, map_id in PROFESSION_SCREENS.items() if skill in professions},
+        "collections": {kind: screen(map_id) for kind, map_id in COLLECTION_SCREENS.items()},
+        "pool": pool,
+    }
+    log(f"artwork: {len(artwork['classes'])} classes, {len(artwork['professions'])} professions, "
+        f"{len(artwork['collections'])} collection kinds, {len(pool)} loading screens in the pool")
+    return artwork
 
 
 def build_chains(quest_ids: list[int], quests: dict[int, list]) -> list[list[int]]:
@@ -1058,6 +1124,8 @@ def main() -> int:
     write_lua("Instances.lua", attribution, [("Instances", instances)], args.build)
     write_lua("Collections.lua", "Collectible identifiers from the client tables.",
               [("Collections", collections)], args.build)
+    write_lua("Artwork.lua", "Artwork identifiers from the client tables.",
+              [("Artwork", build_artwork(world, professions, instances))], args.build)
     write_lua("Constants.lua", "Race bits from the client tables.", [("Races", build_races(cache)),
               ("Build", args.build)], args.build)
     for locale in LOCALES:
