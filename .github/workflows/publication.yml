@@ -1,0 +1,137 @@
+# Publishes a release of the addon for every pull request merged into master. The release is
+# created on the merge commit and tagged with the version carried by the pull request title
+# ("Azeroth Complete v0.1.0" -> v0.1.0); a version that was already published gets one more
+# number, the first free one (v0.1.0.1, v0.1.0.2...). Its notes are the title and description
+# of the pull request. The addon zip, ready to extract into Interface/AddOns, is attached, with
+# the version written into its TOC.
+#
+# A missed or cancelled publication can be started by hand ("Run workflow") with the number of
+# the merged pull request; its title and description are then read as they are now.
+name: Publication
+
+on:
+  pull_request:
+    types: [closed]
+    branches: [master]
+  workflow_dispatch:
+    inputs:
+      pr:
+        description: Number of the merged pull request to publish
+        required: true
+
+permissions:
+  contents: write
+  pull-requests: read
+
+concurrency:
+  group: publication
+  cancel-in-progress: false
+
+env:
+  ADDON: AzerothComplete
+
+jobs:
+  publish:
+    if: github.event_name == 'workflow_dispatch' || github.event.pull_request.merged == true
+    runs-on: ubuntu-latest
+    steps:
+      - name: Read the merged pull request
+        id: pr
+        env:
+          GH_TOKEN: ${{ github.token }}
+          NUMBER: ${{ github.event.pull_request.number || inputs.pr }}
+        run: |
+          gh api "repos/$GITHUB_REPOSITORY/pulls/$NUMBER" > "$RUNNER_TEMP/pr.json"
+          if [ "$(jq -r .merged "$RUNNER_TEMP/pr.json")" != true ]; then
+            echo "::error::Pull request #$NUMBER is not merged."
+            exit 1
+          fi
+          jq -r '.body // ""' "$RUNNER_TEMP/pr.json" > "$RUNNER_TEMP/body.md"
+          {
+            echo "number=$NUMBER"
+            echo "title=$(jq -r .title "$RUNNER_TEMP/pr.json")"
+            echo "merge=$(jq -r .merge_commit_sha "$RUNNER_TEMP/pr.json")"
+          } >> "$GITHUB_OUTPUT"
+
+      - name: Read the version in the pull request title
+        id: version
+        env:
+          PR_TITLE: ${{ steps.pr.outputs.title }}
+        run: |
+          version=$(grep -oE '[0-9]+\.[0-9]+\.[0-9]+' <<< "$PR_TITLE" | head -n 1)
+          if [ -z "$version" ]; then
+            echo "::error::The pull request title (\"$PR_TITLE\") carries no version such as 0.1.0."
+            exit 1
+          fi
+          echo "version=$version" >> "$GITHUB_OUTPUT"
+
+      - name: Check out the merge commit
+        uses: actions/checkout@v4
+        with:
+          ref: ${{ steps.pr.outputs.merge }}
+
+      - name: Number the release after those that already have this version
+        id: number
+        env:
+          VERSION: ${{ steps.version.outputs.version }}
+        run: |
+          version=$VERSION
+          suffix=0
+          while git ls-remote --exit-code --tags origin "refs/tags/v$version" > /dev/null; do
+            suffix=$((suffix + 1))
+            version="$VERSION.$suffix"
+          done
+          echo "Published version: $version"
+          echo "version=$version" >> "$GITHUB_OUTPUT"
+          echo "tag=v$version" >> "$GITHUB_OUTPUT"
+          echo "zip=$ADDON-v$version.zip" >> "$GITHUB_OUTPUT"
+
+      - name: Install Lua 5.1
+        run: |
+          sudo apt-get update -qq
+          sudo apt-get install -y -qq lua5.1
+
+      - name: Run the tests
+        run: |
+          AC_TEST_LOCALE=enUS lua5.1 tests/run.lua
+          AC_TEST_LOCALE=frFR lua5.1 tests/run.lua
+
+      - name: Package the addon
+        env:
+          VERSION: ${{ steps.number.outputs.version }}
+          ZIP: ${{ steps.number.outputs.zip }}
+        run: |
+          mkdir -p build
+          cp -r "$ADDON" "build/$ADDON"
+          cp LICENSE README.md "build/$ADDON/"
+          sed -i "s/@project-version@/$VERSION/" "build/$ADDON/$ADDON.toc"
+          grep -q "## Version: $VERSION" "build/$ADDON/$ADDON.toc"
+          (cd build && zip -qr "$ZIP" "$ADDON")
+          ls -l build
+
+      - name: Write the release notes
+        env:
+          PR_TITLE: ${{ steps.pr.outputs.title }}
+          PR_NUMBER: ${{ steps.pr.outputs.number }}
+        run: |
+          {
+            printf '## %s (#%s)\n\n' "$PR_TITLE" "$PR_NUMBER"
+            if [ -s "$RUNNER_TEMP/body.md" ]; then
+              cat "$RUNNER_TEMP/body.md"
+              printf '\n'
+            fi
+          } > notes.md
+          cat notes.md
+
+      - name: Create the release
+        env:
+          GH_TOKEN: ${{ github.token }}
+          TAG: ${{ steps.number.outputs.tag }}
+          VERSION: ${{ steps.number.outputs.version }}
+          ZIP: ${{ steps.number.outputs.zip }}
+          TARGET: ${{ steps.pr.outputs.merge }}
+        run: |
+          gh release create "$TAG" "build/$ZIP" \
+            --target "$TARGET" \
+            --title "Azeroth Complete v$VERSION" \
+            --notes-file notes.md
