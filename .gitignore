@@ -1,0 +1,10 @@
+# Downloads and intermediate files of tools/build_data.py
+.cache/
+
+# Packaging output
+build/
+dist/
+
+# Python
+__pycache__/
+*.pyc
