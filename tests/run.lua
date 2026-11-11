@@ -193,6 +193,46 @@ local listsToys = false
 for _, kind in ipairs(ns.MainFrame.activeView.kinds.items) do if kind == "toys" then listsToys = true end end
 check(listsToys, "the toy box is a kind of the collections tab")
 
+-- Lists of groups: levels first (lowest, then highest), then the others; names otherwise.
+local sorted = ns.UI.SortByLevel({
+    { name = "Zeta" }, { name = "beta", levels = { 10, 20 } }, { name = "Alpha", levels = { 10, 20 } },
+    { name = "Gamma", levels = { 10, 15 } }, { name = "Étoile" }, { name = "Delta", levels = { 5, 60 } },
+}, function(group) return group.levels end, function(group) return group.name end)
+local order = {}
+for _, group in ipairs(sorted) do order[#order + 1] = group.name end
+check(table.concat(order, ",") == "Delta,Gamma,Alpha,beta,Étoile,Zeta", "groups are sorted by level then name (%s)",
+    table.concat(order, ","))
+
+-- Legacy challenges within reach: the categories of other classes and unlearned professions
+-- are hidden, the others listed in alphabetical order.
+ns.MainFrame:SelectTab("achievements")
+local challengeNames = {}
+for _, category in ipairs(ns.MainFrame.activeView.categories.items) do challengeNames[#challengeNames + 1] = category.name end
+local expectedChallenges = GetLocale() == "frFR" and "Exploration,Forge,Paladin" or "Blacksmithing,Exploration,Paladin"
+check(table.concat(challengeNames, ",") == expectedChallenges,
+    "challenge categories within reach, in alphabetical order (%s)", table.concat(challengeNames, ","))
+frame.filter:Click()
+check(#ns.MainFrame.activeView.categories.items == 5, "every challenge category is listed without the filter")
+frame.filter:Click()
+
+-- A quest title the server does not send falls back to the shipped title of the client's
+-- language, and is asked again later.
+local requestQuest = C_QuestLog.RequestLoadQuestByID
+C_QuestLog.RequestLoadQuestByID = function(questID)
+    C_Timer.After(0.1, function() Stub.Fire("QUEST_DATA_LOAD_RESULT", questID, false) end)
+end
+check(ns.Names.Quest(93928) == nil, "a quest title is first requested")
+-- The requests of the tabs gone through before are ahead in the queue.
+Stub.Advance(15)
+local shipped = ns:GameString("quests", 93928) or ns.Data.Quests[93928][ns.Const.Quest.NAME_FALLBACK]
+check(GetLocale() == "enUS" or ns:GameString("quests", 783) == "Menace intérieure", "the %s data ships localized quest titles", GetLocale())
+check(ns.Names.Quest(93928) == shipped, "an unanswered quest title uses the shipped one (%s)", tostring(ns.Names.Quest(93928)))
+C_QuestLog.RequestLoadQuestByID = requestQuest
+Stub.Advance(130)
+ns.Names.Quest(93928)
+Stub.Advance(2)
+check(ns.Names.Quest(93928) == "Quest 93928", "an unanswered quest title is asked again later")
+
 -- Every tab has content
 local expectations = {
     professions = "recipes", dungeons = "entries", raids = "entries",

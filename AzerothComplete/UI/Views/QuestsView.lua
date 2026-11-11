@@ -162,16 +162,7 @@ function View:GroupsOf(continentValue)
     for _, continent in ipairs(option.continents) do
         for _, group in ipairs(all[continent] or {}) do groups[#groups + 1] = group end
     end
-    -- Lowest levels first: by minimum level, then maximum level; categories by name.
-    table.sort(groups, function(a, b)
-        if a.continent ~= Continent.CATEGORIES and b.continent ~= Continent.CATEGORIES then
-            local minA, minB = a.levels and a.levels[1] or 99, b.levels and b.levels[1] or 99
-            if minA ~= minB then return minA < minB end
-            local maxA, maxB = a.levels and a.levels[2] or 99, b.levels and b.levels[2] or 99
-            if maxA ~= maxB then return maxA < maxB end
-        end
-        return ns.Quests:GroupName(a) < ns.Quests:GroupName(b)
-    end)
+    UI.SortByLevel(groups, function(group) return group.levels end, function(group) return ns.Quests:GroupName(group) end)
     self.sortedGroups[continentValue] = groups
     return groups
 end

@@ -1,17 +1,21 @@
 """Builds the generated data files of Azeroth Complete (AzerothComplete/Data/*.lua).
 
-Two sources are combined:
+Three sources are combined:
 
 * QuestieDB (GPL-3.0, https://github.com/Questie/QuestieDB): quest structure (zones, levels,
   prerequisites, chains), quest givers and recipe sources. Only identifiers and numbers are kept,
-  plus English names used as a last resort when the client cannot provide a text.
+  plus the quest titles of its translations and English names, used when the client cannot
+  provide a text.
 * The game client tables of the targeted WoW Forever build, as published by wago.tools:
   recipes, instances, encounters, collectible identifiers, map exploration overlays, the
   loading screens that stand for zones without a drawable map, the talent backgrounds of the
   class categories, and the localized strings the client API does not expose.
+* Wowhead (https://www.wowhead.com/forever): the localized quest titles the QuestieDB
+  translations lack, read through Playwright and Google Chrome when they are installed.
 
 Usage:
     python -I tools/build_data.py [--build 1.60.1.70888] [--cache DIR] [--questiedb DIR]
+                                  [--wowhead-browser http://localhost:9222] [--wowhead-limit N]
 
 Downloads are cached; delete the cache directory to refresh them.
 """
@@ -23,9 +27,11 @@ import csv
 import json
 import os
 import platform
+import random
 import shutil
 import subprocess
 import sys
+import time
 import urllib.parse
 import urllib.request
 from collections import defaultdict
@@ -40,6 +46,9 @@ QUESTIEDB_REPO = "https://github.com/Questie/QuestieDB.git"
 WAGO_URL = "https://wago.tools/db2/{table}/csv?build={build}{locale}"
 WAGO_FILE_URL = "https://wago.tools/api/casc/{file}?version={build}"
 WAGO_FILE_SEARCH_URL = "https://wago.tools/api/files?search={path}&version={build}"
+WOWHEAD_QUEST_URL = "https://www.wowhead.com/forever/{language}/quest={quest}"
+# Wowhead language of each locale whose quest titles are read there.
+WOWHEAD_LANGUAGES = {"frFR": "fr"}
 
 # Client tables read by the builder. Localized tables are also fetched for every locale.
 TABLES = ("QuestV2", "AreaTable", "Map", "LoadingScreens", "ChrRaces", "ChrClasses", "QuestSort",
@@ -112,6 +121,19 @@ CATEGORY_SCREENS = {
     666: 37,       # Camping: the forests of Azshara Crater
     676: 489,      # Night Elf: Warsong Gulch, the Silverwing Sentinels
     16941: 70,     # Crafting: Uldaman, the titans' workshops
+}
+
+# Loading screens standing for the instances whose own screen the client does not ship (the
+# Season of Discovery ones), all of places of the Forever world: the screen of another map,
+# or a client file with the original framed layout. Each differs from the others of its list.
+INSTANCE_SCREENS = {
+    2784: 489,    # Demon Fall Canyon: Warsong Gulch, in Ashenvale as well
+    2875: "interface/glues/loadingscreens/loadscreenkarazhan.blp",  # Karazhan Crypts: Karazhan
+    2789: 0,      # The Tainted Scar: the Eastern Kingdoms, around the Blasted Lands
+    2791: 37,     # Storm Cliffs: Azshara Crater
+    2804: 349,    # The Crystal Vale: Maraudon, its crystal caverns
+    2832: 43,     # Nightmare Grove: Wailing Caverns, the first nightmare
+    2856: 189,    # Scarlet Enclave: Scarlet Monastery
 }
 
 # Maps whose loading screen stands for each profession on the professions tab.
@@ -225,6 +247,138 @@ class ShippedFiles:
         return self.known[key]
 
 
+class WowheadTitles:
+    """Quest titles of a locale read on Wowhead, for the quests whose title the QuestieDB
+    translations lack. Wowhead turns away plain HTTP clients and browsers that read too fast:
+    a headless Chromium driven by Playwright, masked by playwright-stealth, reads one page at a
+    time, each in a fresh tab, with a random pause after every attempt, successful or not.
+    After a run of failures it pauses longer, and stops when the failures go on, the next run
+    taking over. Answers, including the quests Wowhead does not know, are cached after each
+    page in wowhead.<locale>.json; without Playwright nothing new is read.
+
+    When Wowhead asks the headless browser for a captcha, a browser of the user's that Wowhead
+    lets through can read instead: started with a remote debugging port, it is reached at
+    `browser_url`, and each page opens in a tab of its own, closed once read."""
+
+    class Challenged(Exception):
+        """Wowhead asks to prove a human is browsing: nothing more can be read for now."""
+
+    MIN_DELAY_SECONDS, MAX_DELAY_SECONDS = 2.0, 5.0
+    FAILURES_BEFORE_PAUSE, PAUSE_SECONDS, PAUSES_BEFORE_STOP = 5, 120, 3
+    USER_AGENT = ("Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) "
+                  "Chrome/149.0.0.0 Safari/537.36")
+    # The heading of a Wowhead entry page, absent from its browser check and redirection pages.
+    CONTENT_SELECTOR = "h1.heading-size-1"
+
+    def __init__(self, cache: Path, locale: str, browser_url: str | None = None, limit: int | None = None):
+        self.locale = locale
+        self.browser_url = browser_url
+        self.limit = limit
+        self.path = cache / f"wowhead.{locale}.json"
+        self.known = json.loads(self.path.read_text(encoding="utf-8")) if self.path.exists() else {}
+
+    def _save(self) -> None:
+        temporary = self.path.with_suffix(".tmp")
+        temporary.write_text(json.dumps(self.known, ensure_ascii=False, indent=0, sort_keys=True), encoding="utf-8")
+        temporary.replace(self.path)
+
+    def _read(self, context, quest_id: int, language: str) -> str | None:
+        """Title of one quest, None when Wowhead does not know it; raises when the page fails."""
+        page = context.new_page()
+        try:
+            if self.stealth:
+                self.stealth.apply_stealth_sync(page)
+            url = WOWHEAD_QUEST_URL.format(language=language, quest=quest_id)
+            response = page.goto(url, wait_until="domcontentloaded", timeout=30000)
+            if response is not None and response.status == 404:
+                return None
+            try:
+                page.wait_for_selector(self.CONTENT_SELECTOR, timeout=15000)
+            except Exception:
+                # The browser check that does not let the page through ends with a captcha.
+                if page.query_selector("#captcha-container, .amzn-captcha-modal") or "human" in page.title().lower():
+                    raise WowheadTitles.Challenged()
+                raise
+            # A quest Wowhead does not know shows another page, whose canonical address is not
+            # the quest's.
+            canonical = page.query_selector('link[rel="canonical"]')
+            href = canonical.get_attribute("href") if canonical else ""
+            if f"/quest={quest_id}/" not in (href or ""):
+                return None
+            meta = page.query_selector('meta[property="og:title"]')
+            title = meta.get_attribute("content") if meta else None
+            # Wowhead writes French punctuation with no-break spaces.
+            return title.replace(" ", " ").strip() if title else None
+        finally:
+            page.close()
+            time.sleep(random.uniform(self.MIN_DELAY_SECONDS, self.MAX_DELAY_SECONDS))
+
+    def fetch(self, quest_ids) -> None:
+        missing = sorted({q for q in quest_ids if str(q) not in self.known})
+        if self.limit is not None:
+            missing = missing[:self.limit]
+        language = WOWHEAD_LANGUAGES.get(self.locale)
+        if not missing or not language:
+            return
+        try:
+            from playwright.sync_api import sync_playwright
+        except ImportError:
+            log(f"WARNING: Playwright is not installed: {len(missing)} {self.locale} quest titles not read on Wowhead")
+            return
+        try:
+            from playwright_stealth import Stealth
+            self.stealth = Stealth()
+        except ImportError:
+            self.stealth = None
+        log(f"reading {len(missing)} {self.locale} quest titles on Wowhead (about "
+            f"{len(missing) * (self.MIN_DELAY_SECONDS + self.MAX_DELAY_SECONDS) / 2 / 60 + len(missing) / 60:.0f} minutes)")
+        read, failures, pauses = 0, 0, 0
+        with sync_playwright() as playwright:
+            if self.browser_url:
+                # The user's own browser: its session is used as it is, and left open.
+                browser = playwright.chromium.connect_over_cdp(self.browser_url)
+                context = browser.contexts[0]
+                self.stealth = None
+            else:
+                browser = playwright.chromium.launch(headless=True)
+                context = browser.new_context(locale=f"{self.locale[:2]}-{self.locale[2:]}",
+                                              viewport={"width": 1366, "height": 900}, user_agent=self.USER_AGENT)
+                context.add_init_script("Object.defineProperty(navigator, 'webdriver', { get: () => undefined });")
+            for quest_id in missing:
+                try:
+                    self.known[str(quest_id)] = self._read(context, quest_id, language)
+                    self._save()
+                    read, failures, pauses = read + 1, 0, 0
+                    if read % 50 == 0:
+                        log(f"Wowhead {self.locale}: {read} of {len(missing)} pages read")
+                except WowheadTitles.Challenged:
+                    log(f"WARNING: Wowhead asks for a captcha; stopped after {read} pages, the next run goes on")
+                    break
+                except Exception as error:  # a failed page is read again on the next run
+                    failures += 1
+                    log(f"Wowhead quest {quest_id}: {error.__class__.__name__}")
+                    if failures >= self.FAILURES_BEFORE_PAUSE:
+                        pauses += 1
+                        if pauses > self.PAUSES_BEFORE_STOP:
+                            log(f"WARNING: Wowhead keeps failing; stopped after {read} pages, the next run goes on")
+                            break
+                        log(f"Wowhead fails {failures} times in a row: pausing {self.PAUSE_SECONDS} s")
+                        time.sleep(self.PAUSE_SECONDS)
+                        failures = 0
+            if not self.browser_url:
+                browser.close()
+        found = sum(1 for q in missing if self.known.get(str(q)))
+        log(f"Wowhead {self.locale}: {found} quest titles found, {sum(1 for q in missing if str(q) not in self.known)} left to read")
+
+    def get(self, quest_id: int) -> str | None:
+        """Cached title in the spelling of the game: Wowhead puts an untranslated title
+        between brackets, and writes the apostrophe as a typographic one."""
+        title = self.known.get(str(quest_id))
+        if not title or (title.startswith("[") and title.endswith("]")):
+            return None
+        return title.replace("\u2019", "'")
+
+
 def read_table(cache: Path, table: str, locale: str | None = None) -> list[dict[str, str]]:
     path = cache / (f"{table}.{locale}.csv" if locale else f"{table}.csv")
     with open(path, encoding="utf-8", newline="") as handle:
@@ -246,7 +400,8 @@ def load_questie(questiedb: Path, cache: Path) -> dict:
     log("exporting the combined Forever databases")
     subprocess.run([str(lua), "tools/export-forever.lua", "--include-authored"], cwd=questiedb, check=True)
     dump = cache / "questie.json"
-    subprocess.run([str(lua), str(ROOT / "tools" / "questie_dump.lua"), str(questiedb), str(dump)], check=True)
+    translated = [locale for locale in LOCALES if locale != "enUS"]
+    subprocess.run([str(lua), str(ROOT / "tools" / "questie_dump.lua"), str(questiedb), str(dump), *translated], check=True)
     with open(dump, encoding="utf-8") as handle:
         return json.load(handle)
 
@@ -679,6 +834,25 @@ def category_screen(world: World, key: int) -> dict:
     return world.screen_art(file_id) if file_id else {}
 
 
+def instance_art(world: World, map_id: int) -> dict:
+    """Loading screen of an instance, or the one chosen for it when the client does not ship
+    its own."""
+    file_id = world.loading_screen(map_id)
+    if file_id:
+        return world.screen_art(file_id)
+    substitute = INSTANCE_SCREENS.get(map_id)
+    if isinstance(substitute, int):
+        file_id = world.loading_screen(substitute)
+        if file_id:
+            return world.screen_art(file_id)
+    elif substitute:
+        file_id = world.shipped.file_id(substitute)
+        if file_id and world.shipped(file_id):
+            return {"art": file_id, "artFramed": True}
+    log(f"WARNING: instance {map_id} has no loading screen")
+    return {"art": 0}
+
+
 def class_backgrounds(world: World) -> dict[int, dict]:
     """Talent background of each class: the top left part of its first talent tree, a
     square of 256 pixels. Keys are class ids."""
@@ -735,7 +909,11 @@ def build_artwork(world: World, professions: dict, instances: dict) -> dict:
         log(f"WARNING: no loading screen chosen for professions {missing}")
     pool, seen = [], set()
     for map_id in [0, 1] + sorted(instances):
-        entry = screen(map_id) if map_id in (0, 1) else (world.screen_art(instances[map_id]["art"]) if instances[map_id]["art"] else {})
+        if map_id in (0, 1):
+            entry = screen(map_id)
+        else:
+            instance = instances[map_id]
+            entry = {k: instance[k] for k in ("art", "artFramed") if instance.get(k)} if instance["art"] else {}
         if entry and entry["art"] not in seen:
             seen.add(entry["art"])
             pool.append(entry)
@@ -938,7 +1116,7 @@ def build_instances(cache: Path, world: World, instance_quests: dict[int, list[i
             "kind": kind,
             "area": to_int(row["AreaTableID"]),
             "players": to_int(row.get("MaxPlayers")),
-            **world.screen_art(world.loading_screen(map_id)),
+            **instance_art(world, map_id),
             "bosses": [e["id"] for e in bosses],
             "chains": build_chains(quest_ids, quests) if quest_ids else [],
             "levels": [min(levels), max(levels)] if levels else None,
@@ -1031,8 +1209,27 @@ def build_races(cache: Path) -> dict:
     return {"raceBits": races, "allianceRaces": alliance, "hordeRaces": horde}
 
 
+def quest_titles(cache: Path, locale: str, questie: dict, quests: dict, wowhead_browser: str | None = None,
+                 wowhead_limit: int | None = None) -> dict:
+    """Quest titles of a locale, used when the server does not answer the client: the
+    QuestieDB translation, otherwise the title read on Wowhead. English has the QuestieDB
+    names of the quest rows."""
+    if locale == "enUS":
+        return {}
+    translated = questie.get("questTitles", {}).get(locale, {})
+    titles = {q: translated[str(q)] for q in quests if translated.get(str(q))}
+    wowhead = WowheadTitles(cache, locale, wowhead_browser, wowhead_limit)
+    wowhead.fetch(q for q in quests if q not in titles)
+    for quest_id in quests:
+        if quest_id not in titles and wowhead.get(quest_id):
+            titles[quest_id] = wowhead.get(quest_id)
+    log(f"{locale} quest titles: {len(titles)} of {len(quests)} "
+        f"({sum(1 for q in quests if translated.get(str(q)))} from QuestieDB)")
+    return dict(sorted(titles.items()))
+
+
 def build_strings(cache: Path, locale: str, zones: dict, sorts: dict, professions: dict,
-                  instances: dict, encounter_ids: set[int], toys: list[int]) -> dict:
+                  instances: dict, encounter_ids: set[int], toys: list[int], titles: dict) -> dict:
     """Client strings the game API does not expose, used when the client cannot provide them."""
     areas = {to_int(r["ID"]): r["AreaName_lang"] for r in read_table(cache, "AreaTable", locale)}
     map_names = {to_int(r["ID"]): r["Name_lang"] for r in read_table(cache, "UiMap", locale)}
@@ -1051,6 +1248,7 @@ def build_strings(cache: Path, locale: str, zones: dict, sorts: dict, profession
         "skillLines": {s: lines[s] for s in sorted(professions) if lines.get(s)},
         "encounters": {e: bosses[e] for e in sorted(encounter_ids) if bosses.get(e)},
         "toySources": {t: toy_sources[t] for t in toys if toy_sources.get(t)},
+        "quests": titles,
     }
 
 
@@ -1092,6 +1290,9 @@ def main() -> int:
     parser.add_argument("--build", default=DEFAULT_BUILD, help="WoW Forever client build to read the tables of")
     parser.add_argument("--cache", type=Path, default=ROOT / ".cache", help="download cache directory")
     parser.add_argument("--questiedb", type=Path, default=None, help="existing QuestieDB checkout (cloned into the cache otherwise)")
+    parser.add_argument("--wowhead-browser", default=None,
+                        help="read Wowhead through a running browser, at its remote debugging address (http://localhost:9222)")
+    parser.add_argument("--wowhead-limit", type=int, default=None, help="read at most this many Wowhead pages in this run")
     args = parser.parse_args()
 
     cache = args.cache / args.build
@@ -1129,7 +1330,8 @@ def main() -> int:
     write_lua("Constants.lua", "Race bits from the client tables.", [("Races", build_races(cache)),
               ("Build", args.build)], args.build)
     for locale in LOCALES:
-        strings = build_strings(cache, locale, zones, sorts, professions, instances, encounter_ids, collections["toys"])
+        strings = build_strings(cache, locale, zones, sorts, professions, instances, encounter_ids, collections["toys"],
+                                quest_titles(cache, locale, questie, quests, args.wowhead_browser, args.wowhead_limit))
         name = f"Strings.{locale}.lua"
         lines = [
             "-- Generated by tools/build_data.py. Do not edit by hand.",

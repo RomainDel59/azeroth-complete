@@ -18,9 +18,12 @@ user-facing string goes through the localization tables.
 Text about game content (quests, items, spells, zones, factions, encounters, collectibles) is
 asked from the client at runtime, so that it is always the official wording in the player's
 language. The generated data therefore carries identifiers and numbers. A text is shipped only
-when no client API exposes it, and then it is extracted from the client tables of the targeted
-build for every supported language (`Data/Strings.<locale>.lua`); English names taken from
-QuestieDB serve solely as the last fallback, when the client fails to answer. Interface labels
+when no client API exposes it, or when the client depends on a server that may leave the
+request unanswered; a shipped text exists for every supported language
+(`Data/Strings.<locale>.lua`) and is the official wording, taken from the client tables of the
+targeted build when they hold it, otherwise from an outside source that publishes that wording
+for the Forever client, the generator stating which. The English names of the data serve
+solely as the last fallback, for a text no source provides in the player's language. Interface labels
 that the client defines as global strings are read from those globals before the addon's own
 translations (`ns:GameLabel`).
 

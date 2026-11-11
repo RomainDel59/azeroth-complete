@@ -27,15 +27,35 @@ local ticker
 local stats = { requested = 0, received = 0, fallbacks = 0 }
 local fellBack = {} -- ["kind:id"] = true once counted
 local NPC_RETRY_SECONDS = 10
+-- The server may answer a request it ignored before: an unanswered text is asked again
+-- after this delay, the shipped fallback standing in meanwhile.
+local RETRY_SECONDS = 120
+local REPORT_DELAY = 10
+local unreported = {} -- [kind] = { ids that fell back since the last report }
+
+-- Fallbacks are logged in batches, every id of a kind in one line, so that the log tells
+-- exactly which texts the client did not provide.
+local function flushFallbacks()
+    for kind, ids in pairs(unreported) do
+        if #ids > 0 then
+            table.sort(ids)
+            ns.Log:Info("Client did not provide %d %s texts; using the shipped fallback: %s", #ids, kind, table.concat(ids, ", "))
+        end
+    end
+    unreported = {}
+    fallbackReported.scheduled = nil
+end
 
 local function reportFallback(kind, id)
     local key = kind .. ":" .. tostring(id)
     if fellBack[key] then return end
     fellBack[key] = true
     stats.fallbacks = stats.fallbacks + 1
-    if not fallbackReported[kind] then
-        fallbackReported[kind] = true
-        ns.Log:Info("Client did not provide a %s text (first: %s); using the shipped fallback", kind, tostring(id))
+    unreported[kind] = unreported[kind] or {}
+    table.insert(unreported[kind], id)
+    if not fallbackReported.scheduled then
+        fallbackReported.scheduled = true
+        C_Timer.After(REPORT_DELAY, function() ns:SafeCall("Names.report", flushFallbacks) end)
     end
 end
 
@@ -81,7 +101,7 @@ local function tick()
                 notify()
             elseif now - since > GIVE_UP_SECONDS then
                 waiting[kind][id] = nil
-                failed[kind][id] = true
+                failed[kind][id] = now
                 notify()
             end
         end
@@ -132,7 +152,13 @@ local function resolve(kind, cacheName, id, fallback)
     if cached then return cached end
     local value = resolvers[kind](id)
     if value then return value end
-    if failed[kind][id] then
+    local failedAt = failed[kind][id]
+    if failedAt then
+        -- A request that timed out (not one the client cannot make) is retried later.
+        if type(failedAt) == "number" and GetTime() - failedAt > RETRY_SECONDS then
+            failed[kind][id] = nil
+            enqueue(kind, id)
+        end
         if fallback then reportFallback(kind, id) end
         return fallback
     end
@@ -146,7 +172,8 @@ end
 
 function Names.Quest(questID)
     local row = ns.Data.Quests[questID]
-    return resolve("quest", "quests", questID, row and row[Q.NAME_FALLBACK])
+    -- The shipped title of the client's language, then the English name of the data.
+    return resolve("quest", "quests", questID, ns:GameString("quests", questID) or (row and row[Q.NAME_FALLBACK]))
 end
 
 function Names.Item(itemID)
@@ -244,7 +271,7 @@ local function onAnswer(kind)
     return function(_, id, success)
         if not id or not waiting[kind][id] then return end
         waiting[kind][id] = nil
-        if success == false or not resolvers[kind](id) then failed[kind][id] = true end
+        if success == false or not resolvers[kind](id) then failed[kind][id] = GetTime() end
         notify()
     end
 end

@@ -323,9 +323,6 @@ function UI.ProgressRing(parent, size, segments)
         segment:SetColorTexture(Theme.Unpack(C.ringTrack))
         ring.segments[i] = segment
     end
-    local disc = UI.Solid(ring, "BACKGROUND", { 0, 0, 0, 0.45 })
-    disc:SetPoint("CENTER")
-    disc:SetSize(size * 0.74, size * 0.74)
     ring.percent = UI.Text(ring, math.floor(size * 0.27), C.green, "fancy", "CENTER")
     ring.percent:SetPoint("CENTER", 0, size * 0.06)
     ring.caption = UI.Text(ring, math.max(9, math.floor(size * 0.09)), C.text, "body", "CENTER")
@@ -963,6 +960,26 @@ local ACCENTS = {
     ["À"] = "a", ["Â"] = "a", ["Ç"] = "c", ["É"] = "e", ["È"] = "e", ["Ê"] = "e", ["Î"] = "i", ["Ô"] = "o",
     ["Û"] = "u", ["Œ"] = "oe",
 }
+-- Order of every list of groups: the groups with a level range first, by lowest then
+-- highest level, then those without one; equal levels and the groups without a level are
+-- in alphabetical order, accents ignored. `levelsOf(group)` returns { low, high } or nil.
+function UI.SortByLevel(list, levelsOf, nameOf)
+    local names = {}
+    for _, group in ipairs(list) do names[group] = UI.Normalize(nameOf(group) or "") end
+    table.sort(list, function(a, b)
+        local la, lb = levelsOf(a), levelsOf(b)
+        if la and not lb then return true end
+        if lb and not la then return false end
+        if la and lb then
+            if la[1] ~= lb[1] then return la[1] < lb[1] end
+            local ha, hb = la[2] or la[1], lb[2] or lb[1]
+            if ha ~= hb then return ha < hb end
+        end
+        return names[a] < names[b]
+    end)
+    return list
+end
+
 function UI.Normalize(text)
     text = (text or ""):lower()
     text = text:gsub("[\195\197\226][\128-\191]+", function(char) return ACCENTS[char] or char end)

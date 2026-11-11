@@ -305,8 +305,11 @@ function C_TransmogSets.GetSetPrimaryAppearances() return { { collected = true }
 function GetTitleName(id) return "Title " .. id .. " " end
 function IsTitleKnown(id) return id == 1 end
 
-function GetCategoryList() return { 92, 93 } end
-function GetCategoryInfo(id) return "Category " .. id, -1 end
+-- Legacy challenge categories: named after a class, a profession or neither.
+local CATEGORY_NAMES = { [92] = "Druid", [93] = "Paladin", [94] = "Exploration",
+    [95] = locale == "frFR" and "Alchimie" or "Alchemy", [96] = locale == "frFR" and "Forge" or "Blacksmithing" }
+function GetCategoryList() return { 92, 93, 94, 95, 96 } end
+function GetCategoryInfo(id) return CATEGORY_NAMES[id] or ("Category " .. id), -1 end
 function GetCategoryNumAchievements() return 2 end
 function GetAchievementInfo(categoryOrID, index)
     local id = index and (categoryOrID * 10 + index) or categoryOrID

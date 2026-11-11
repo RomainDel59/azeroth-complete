@@ -155,6 +155,7 @@ local function newView(kind)
         for _, instance in ipairs(ns.Instances:List(kind)) do
             if UI.Matches(ns.Instances:Name(instance), self.query) then list[#list + 1] = instance end
         end
+        UI.SortByLevel(list, function(item) return item.levels end, function(item) return ns.Instances:Name(item) end)
         if not self.selected then self.selected = list[1] end
         self.instances:SetItems(list, true)
 

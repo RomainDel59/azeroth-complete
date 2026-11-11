@@ -265,6 +265,7 @@ function View:Refresh()
     for _, profession in ipairs(list) do
         if profession.skillLine == self.selected then listed = true end
     end
+    UI.SortByLevel(list, function() return nil end, function(profession) return ns.Names.SkillLine(profession.skillLine) end)
     if not listed then
         self.selected, self.selectedRecipe = nil, nil
     end

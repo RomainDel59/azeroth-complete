@@ -15,6 +15,25 @@ local function buildCategoryCard(row)
     UI.ArtCard(row)
 end
 
+-- Categories out of the character's reach, in the character filter: those named after
+-- another class, or after a profession the character has not learned.
+local function outOfReach(categories)
+    local hidden = {}
+    local byName = {}
+    for classID in pairs(ns.Data.Artwork.classes) do
+        local name = ns.Compat.GetClassName(classID)
+        if name then byName[name] = classID ~= ns.Player.classID end
+    end
+    for skillLine in pairs(ns.Data.Professions) do
+        local name = ns.Names.SkillLine(skillLine)
+        if name then byName[name] = not ns.Professions:HasLearned(skillLine) end
+    end
+    for _, category in ipairs(categories) do
+        if byName[category.name] then hidden[category.id] = true end
+    end
+    return hidden
+end
+
 -- Artwork of the categories, which the client defines: a category named after a class shows
 -- its talent background, one named after a profession its loading screen, and the others
 -- take loading screens from the pool, so that no two cards of the list look the same.
@@ -187,17 +206,23 @@ function View:Refresh()
     if self.artworkFor ~= categories then
         self.artwork, self.artworkFor = categoryArtwork(categories), categories
     end
+    local hidden = ns.Quests:UsesCharacterFilter(self.mainFrame:View()) and outOfReach(categories) or {}
     local done, total = 0, 0
     local current
-    local listedCategories = {}
+    local reachable, listedCategories = {}, {}
     for _, category in ipairs(categories) do
-        local summary = ns.Achievements:Summary(category, tracking)
-        done, total = done + summary.done, total + summary.total
-        if category.id == self.selected then current = category end
-        if UI.Matches(category.name, self.categoryQuery) then listedCategories[#listedCategories + 1] = category end
+        if not hidden[category.id] then
+            local summary = ns.Achievements:Summary(category, tracking)
+            done, total = done + summary.done, total + summary.total
+            reachable[#reachable + 1] = category
+            if category.id == self.selected then current = category end
+            if UI.Matches(category.name, self.categoryQuery) then listedCategories[#listedCategories + 1] = category end
+        end
     end
+    UI.SortByLevel(reachable, function() return nil end, function(category) return category.name end)
+    UI.SortByLevel(listedCategories, function() return nil end, function(category) return category.name end)
     if not current then
-        current = categories[1]
+        current = reachable[1]
         self.selected = current and current.id
     end
     self.page.groupsCount:SetText(string.format("%d / %d", done, total))

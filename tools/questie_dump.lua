@@ -1,14 +1,17 @@
 -- Dumps the parts of a QuestieDB checkout that Azeroth Complete needs as one JSON document.
 --
--- Usage: luajit questie_dump.lua <QuestieDB checkout> <output.json>
+-- Usage: luajit questie_dump.lua <QuestieDB checkout> <output.json> [locale ...]
 --
 -- Prerequisite: the combined Forever export must exist in the checkout
 -- (tools/export-forever.lua --include-authored), which build_data.py runs first.
--- Only identifiers, numbers and English fallback names are kept: the addon asks the
--- game client for every displayed text.
+-- Only identifiers, numbers and fallback names are kept: the addon asks the game client
+-- for every displayed text. The fallback names are English, plus the quest titles of each
+-- locale given on the command line, from the QuestieDB translations.
 
 local root, outPath = arg[1], arg[2]
-assert(root and outPath, "usage: questie_dump.lua <QuestieDB checkout> <output.json>")
+assert(root and outPath, "usage: questie_dump.lua <QuestieDB checkout> <output.json> [locale ...]")
+local locales = {}
+for i = 3, #arg do locales[#locales + 1] = arg[i] end
 
 -------------------------------------------------------------------------------
 -- Minimal environment for the QuestieDB support modules
@@ -94,8 +97,30 @@ for areaId, entry in pairs(zoneDB.private.dungeons or {}) do
     dungeonAreas[tostring(areaId)] = entry[2] or {}
 end
 
+-- Quest titles of each requested locale. A translation file only loads for its own client
+-- locale and stores its table as Lua source in l10n.questLookup.
+local questTitles = {}
+for _, locale in ipairs(locales) do
+    local l10n = QuestieLoader:ImportModule("l10n")
+    l10n.questLookup = {}
+    GetLocale = function() return locale end
+    local path = root .. "/l10n/Forever/lookupQuests/" .. locale .. ".lua"
+    local chunk = loadfile(path)
+    local titles = {}
+    if chunk then
+        chunk()
+        local lookup = l10n.questLookup[locale]
+        local entries = type(lookup) == "function" and lookup() or lookup or {}
+        for id, entry in pairs(entries) do
+            local title = type(entry) == "table" and entry[1] or entry
+            if type(title) == "string" and title ~= "" then titles[tostring(id)] = title end
+        end
+    end
+    questTitles[locale] = titles
+end
+
 local out = { quests = {}, npcs = {}, objects = {}, items = {}, areaToUiMap = areaToUiMap,
-    subZoneToParent = subZoneToParent, dungeonAreas = dungeonAreas }
+    subZoneToParent = subZoneToParent, dungeonAreas = dungeonAreas, questTitles = questTitles }
 
 -- Items a quest asks for: the third list of its objectives, { { itemID, text }, ... }.
 local function objectiveItems(objectives)

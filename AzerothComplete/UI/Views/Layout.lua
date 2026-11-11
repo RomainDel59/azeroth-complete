@@ -73,13 +73,14 @@ function Layout.Banner(parent, height)
     return banner
 end
 
--- Page of every tab, laid out as the quests tab: the groups on the left (title, optional
--- controls, search, cards), the selected group in the middle (title, banner, then the
+-- Page of every tab, laid out as the quests tab: the groups on the left (title, search,
+-- optional controls, cards), the selected group in the middle (title, banner, then the
 -- details of the selected item), the items of the group on the right (title, search, state
 -- filter, list, count). Views fill it; they do not lay out their own widgets.
 --
 -- `spec`: groupsTitle, groupSearch, onGroupSearch(text), controlsHeight and
--- buildControls(left, top) for widgets above the search, buildGroup(row) and
+-- buildControls(left, top) for widgets between the search and the cards, as the state
+-- filter stands under the search of the items, buildGroup(row) and
 -- fillGroup(row, group) for the cards, detailsTitle, itemSearch, onItemSearch(text),
 -- filterKey and onFilter() for the state filter, itemHeight, buildItem(row),
 -- fillItem(row, item) and itemSpacing for the item rows.
@@ -93,16 +94,16 @@ function Layout.Page(frame, spec)
     page.groupsTitle = Layout.Title(left, spec.groupsTitle, 20, "LEFT")
     page.groupsCount = UI.Text(left, 13, C.gold, "body", "RIGHT")
     page.groupsCount:SetPoint("TOPRIGHT", -16, -20)
-    local top = -48
+    page.groupSearch = UI.SearchBox(left, spec.groupSearch, spec.onGroupSearch)
+    page.groupSearch:SetPoint("TOPLEFT", 16, -44)
+    page.groupSearch:SetPoint("TOPRIGHT", -16, -44)
+    local top = -80
     if spec.buildControls then
         spec.buildControls(left, top)
         top = top - spec.controlsHeight
     end
-    page.groupSearch = UI.SearchBox(left, spec.groupSearch, spec.onGroupSearch)
-    page.groupSearch:SetPoint("TOPLEFT", 16, top)
-    page.groupSearch:SetPoint("TOPRIGHT", -16, top)
     page.groups = UI.ScrollList(left, UI.ART_CARD_HEIGHT, spec.buildGroup, spec.fillGroup, 6)
-    page.groups:SetPoint("TOPLEFT", 16, top - 36)
+    page.groups:SetPoint("TOPLEFT", 16, top)
     page.groups:SetPoint("BOTTOMRIGHT", -8, 12)
 
     -- Middle: the selected group and the selected item

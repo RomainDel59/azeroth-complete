@@ -159,6 +159,7 @@ function View:Refresh()
         done, total = done + summary.done, total + summary.total
         if UI.Matches(kindLabel(kind), self.kindQuery) then kinds[#kinds + 1] = kind end
     end
+    UI.SortByLevel(kinds, function() return nil end, kindLabel)
     self.page.groupsCount:SetText(string.format("%d / %d", done, total))
     self.kinds:SetItems(kinds, true)
 
