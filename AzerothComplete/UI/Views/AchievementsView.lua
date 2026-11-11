@@ -53,8 +53,10 @@ function View:Build(frame)
     self.title:SetPoint("TOPRIGHT", -12, -14)
     self.subtitle = UI.Text(center, 14, C.green, "body", "CENTER")
     self.subtitle:SetPoint("TOP", self.title, "BOTTOM", 0, -6)
+    self.filters = UI.StateFilter(center, "achievements", function() self:Refresh() end)
+    self.filters:SetPoint("TOPLEFT", 18, -84)
     self.achievements = UI.ScrollList(center, 42, buildAchievementRow, function(row, id) self:FillAchievement(row, id) end, 3)
-    self.achievements:SetPoint("TOPLEFT", 18, -84)
+    self.achievements:SetPoint("TOPLEFT", 18, -114)
     self.achievements:SetPoint("BOTTOMRIGHT", -8, 14)
 
     Layout.Title(right, L.DETAILS, 20)
@@ -160,7 +162,12 @@ function View:Refresh()
         local summary = ns.Achievements:Summary(current, tracking)
         self.title:SetText(current.name)
         self.subtitle:SetText(string.format(L.COMPLETED_COUNT, summary.done, summary.total))
-        self.achievements:SetItems(current.achievements, true)
+        local listed = {}
+        for _, achievementID in ipairs(current.achievements) do
+            local entry = ns.Achievements:Get(achievementID, tracking)
+            if self.filters:Keeps(entry and entry.completed) then listed[#listed + 1] = achievementID end
+        end
+        self.achievements:SetItems(listed, true)
     else
         self.title:SetText(L.ACHIEVEMENTS_TITLE)
         self.subtitle:SetText(L.NO_ACHIEVEMENTS)

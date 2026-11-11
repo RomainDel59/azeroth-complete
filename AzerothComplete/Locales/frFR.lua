@@ -25,6 +25,9 @@ ns:RegisterLocale("frFR", {
     TRACKING_CHARACTER = "Personnage",
     TRACKING_TOOLTIP_CHARACTER = "Progression de ce personnage. Cliquez pour afficher la progression de tout le compte.",
     TRACKING_TOOLTIP_ACCOUNT = "Progression de tous les personnages du compte. Cliquez pour n'afficher que ce personnage.",
+    STATE_FILTER_ALL = "Tout",
+    STATE_FILTER_TODO = "À faire",
+    STATE_FILTER_DONE = "Fait",
     FILTER_LABEL = "Affichage :",
     FILTER_POSSIBLE = "À sa portée",
     FILTER_EVERYTHING = "Tout",
@@ -50,10 +53,6 @@ ns:RegisterLocale("frFR", {
     LEVEL_RANGE = "Niv. %d-%d",
     LEVEL_SHORT = "Niv. %d",
     XP_SHORT = "XP %d",
-    FILTER_ALL = "Tout",
-    FILTER_MISSING = "Manquants",
-    FILTER_LEARNED = "Apprises",
-    FILTER_COLLECTED = "Obtenus",
 
     -- Quêtes
     ZONES = "Zones",
@@ -77,6 +76,7 @@ ns:RegisterLocale("frFR", {
     STATUS_ACTIVE = "En cours",
     STATUS_AVAILABLE = "Disponible",
     STATUS_LOCKED_LEVEL = "Niveau insuffisant",
+    STATUS_LOCKED_SKILL = "Rang de métier insuffisant",
     STATUS_LOCKED_PREREQ = "Prérequis manquants",
     STATUS_REPEATABLE = "Répétable",
     FLAG_DAILY = "Journalière",

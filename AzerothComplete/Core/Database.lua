@@ -16,7 +16,7 @@ local DEFAULT_SETTINGS = {
     possibleOnly = true, -- character view: only what the character can do
     scale = 1,
     minimap = { angle = 200, hidden = false },
-    showCompleted = true,
+    listFilters = {}, -- state filter of each item list: "all", "todo" or "done"
 }
 
 local function copyDefaults(target, defaults)

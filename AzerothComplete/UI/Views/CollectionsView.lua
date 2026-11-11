@@ -7,7 +7,6 @@ local L = ns.L
 local UI, Theme, Layout = ns.UI, ns.Theme, ns.Layout
 local C = Theme.colors
 
-local FILTERS = { "all", "missing", "collected" }
 
 -- Client label and addon fallback of each collection kind.
 local KIND_LABELS = {
@@ -54,7 +53,6 @@ local function newView(kinds, titleKey)
     local View = {}
 
     function View:Build(frame)
-        self.filter = "all"
         self.query = ""
         self.kind = kinds[1]
         local left, center, right = Layout.Columns(frame)
@@ -71,14 +69,8 @@ local function newView(kinds, titleKey)
         self.title:SetPoint("TOPRIGHT", -12, -14)
         self.subtitle = UI.Text(center, 14, C.green, "body", "CENTER")
         self.subtitle:SetPoint("TOP", self.title, "BOTTOM", 0, -6)
-        local options = {}
-        for _, filter in ipairs(FILTERS) do options[#options + 1] = { value = filter, label = L["FILTER_" .. filter:upper()] } end
-        self.filters = UI.ButtonGroup(center, 92, 22, options, function(value)
-            self.filter = value
-            self:RefreshEntries()
-        end)
+        self.filters = UI.StateFilter(center, titleKey, function() self:RefreshEntries() end)
         self.filters:SetPoint("TOPLEFT", 18, -84)
-        self.filters:Select("all")
         local search = UI.SearchBox(center, L.SEARCH, function(text)
             self.query = text
             self:RefreshEntries()
@@ -167,9 +159,7 @@ local function newView(kinds, titleKey)
         local items, owned = {}, 0
         for _, entry in ipairs(entries or {}) do
             if entry.collected then owned = owned + 1 end
-            local keep = self.filter == "all" or (self.filter == "collected" and entry.collected)
-                or (self.filter == "missing" and not entry.collected)
-            if keep and UI.Matches(entry.name, self.query) then items[#items + 1] = entry end
+            if self.filters:Keeps(entry.collected) and UI.Matches(entry.name, self.query) then items[#items + 1] = entry end
         end
         self.entries:SetItems(items, true)
         if entries then

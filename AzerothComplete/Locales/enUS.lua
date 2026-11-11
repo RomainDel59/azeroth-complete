@@ -23,6 +23,9 @@ ns:RegisterLocale("enUS", {
     TRACKING_CHARACTER = "Character",
     TRACKING_TOOLTIP_CHARACTER = "Progress of this character. Click to show the progress of the whole account.",
     TRACKING_TOOLTIP_ACCOUNT = "Progress of every character of the account. Click to show this character only.",
+    STATE_FILTER_ALL = "All",
+    STATE_FILTER_TODO = "To do",
+    STATE_FILTER_DONE = "Done",
     FILTER_LABEL = "Show:",
     FILTER_POSSIBLE = "Within reach",
     FILTER_EVERYTHING = "Everything",
@@ -48,10 +51,6 @@ ns:RegisterLocale("enUS", {
     LEVEL_RANGE = "Lvl %d-%d",
     LEVEL_SHORT = "Lvl %d",
     XP_SHORT = "XP %d",
-    FILTER_ALL = "All",
-    FILTER_MISSING = "Missing",
-    FILTER_LEARNED = "Learned",
-    FILTER_COLLECTED = "Owned",
 
     -- Quests
     ZONES = "Zones",
@@ -76,6 +75,7 @@ ns:RegisterLocale("enUS", {
     STATUS_AVAILABLE = "Available",
     STATUS_LOCKED_LEVEL = "Level too low",
     STATUS_LOCKED_PREREQ = "Prerequisites missing",
+    STATUS_LOCKED_SKILL = "Profession rank too low",
     STATUS_REPEATABLE = "Repeatable",
     FLAG_DAILY = "Daily",
     FLAG_WEEKLY = "Weekly",

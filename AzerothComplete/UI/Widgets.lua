@@ -203,6 +203,33 @@ function UI.Button(parent, width, height, label, onClick)
 end
 
 -- Tab button: icon + label.
+-- State filter of an item list: everything, what remains to do, what is done. Every item
+-- list offers it with the same labels, in front of its search box; it only narrows the list,
+-- never the counts. The choice is remembered per list under `key`.
+local STATE_FILTERS = { "all", "todo", "done" }
+
+function UI.StateFilter(parent, key, onChange)
+    local options = {}
+    for _, state in ipairs(STATE_FILTERS) do
+        options[#options + 1] = { value = state, label = ns.L["STATE_FILTER_" .. state:upper()] }
+    end
+    local filters = ns.Database:Settings().listFilters
+    local group = UI.ButtonGroup(parent, 72, 22, options, function(value)
+        filters[key] = value
+        ns.Log:Debug("List filter %s: %s", key, value)
+        onChange(value)
+    end)
+    group:Select(filters[key] or "all")
+
+    -- Whether an item in the given state (done or not) stays in the list.
+    function group.Keeps(_, done)
+        if group.value == "todo" then return not done end
+        if group.value == "done" then return done and true or false end
+        return true
+    end
+    return group
+end
+
 -- Header switch: "LABEL: [icon] value". A click calls `onClick`, which switches the value;
 -- a switch that does not apply is dimmed and explains why in its tooltip.
 function UI.Toggle(parent, label, onClick)

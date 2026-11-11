@@ -248,6 +248,59 @@ ns.Names.Quest = function(questID) return "Writ: Item " .. questID end
 local orders = ns.QuestWidgets.BuildItems(crafting.chains, everythingView, {})
 ns.Names.Quest = questName
 check(orders[1] and orders[1].prefix == "Writ: ", "the shared prefix of the titles is found")
+ns.Names.Quest = function(questID) return "Commission : élixir " .. questID end
+orders = ns.QuestWidgets.BuildItems(crafting.chains, everythingView, {})
+local orderRow = questsView.quests.rows[1]
+ns.QuestWidgets.FillRow(orderRow, orders[1], everythingView)
+ns.Names.Quest = questName
+check(orderRow.name:GetText():sub(1, 7) == "Élixir", "a name left by the prefix starts with a capital (%s)", orderRow.name:GetText())
+
+-- A quest needing a higher profession rank is locked; the character (stub) has 75 in Blacksmithing.
+local hardSmithing = questNeeding(function(row)
+    return row[Q.SKILL] and row[Q.SKILL][1] == 164 and row[Q.SKILL][2] > 75 and not row[Q.PRE_ALL] and not row[Q.PRE_ANY]
+end)
+local playerLevel = ns.Player.level
+ns.Player.level = 60
+local status, reason = ns.Quests:Status(hardSmithing, possibleView)
+ns.Player.level = playerLevel
+check(status == ns.Const.Status.LOCKED and reason == "skill", "a quest above the profession rank is locked (%s, %s)",
+    tostring(status), tostring(reason))
+
+-- The state filter of the item lists: "to do" and "done" narrow the list, never the counts.
+local elwynn = findGroup("ek", 12)
+questsView:SelectGroup(elwynn)
+local filter = questsView.stateFilter
+local everyChainOpen = setmetatable({}, { __index = function() return true end })
+local function listedStates(state)
+    filter.buttons[state]:Click()
+    local done, todo = 0, 0
+    for _, item in ipairs(ns.QuestWidgets.BuildItems(elwynn.chains, possibleView, everyChainOpen, nil, filter)) do
+        if item.kind == "quest" then
+            if ns.Quests:Status(item.id, possibleView) == ns.Const.Status.DONE then done = done + 1 else todo = todo + 1 end
+        end
+    end
+    return done, todo
+end
+local before = ns.Quests:Summary("zone:12", elwynn.chains, possibleView).done
+local allDone, allTodo = listedStates(1)
+local todoDone, todoTodo = listedStates(2)
+local doneDone, doneTodo = listedStates(3)
+check(allDone > 0 and allTodo > 0, "every quest is listed without a state filter")
+check(todoDone == 0 and todoTodo == allTodo, "the to-do filter lists only the remaining quests")
+check(doneTodo == 0 and doneDone == allDone, "the done filter lists only the completed quests")
+check(ns.Database:Settings().listFilters.quests == "done", "the state filter of a list is remembered")
+check(ns.Quests:Summary("zone:12", elwynn.chains, possibleView).done == before, "the state filter keeps the counts")
+filter.buttons[1]:Click()
+for _, tab in ipairs({ "professions", "toys", "dungeons", "raids", "achievements", "collections" }) do
+    ns.MainFrame:SelectTab(tab)
+    local stateFilter = ns.MainFrame.activeView.filters
+    check(stateFilter and stateFilter.Keeps, "tab %s offers the state filter", tab)
+    if stateFilter then
+        stateFilter.buttons[2]:Click()
+        stateFilter.buttons[1]:Click()
+    end
+end
+ns.MainFrame:SelectTab("quests")
 
 -- Professions: known spells were read
 check(ns.Database:Character().recipes[2660], "known recipes are read from the spellbook")

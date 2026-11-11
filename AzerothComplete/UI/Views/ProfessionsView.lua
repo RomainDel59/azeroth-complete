@@ -11,7 +11,6 @@ local UI, Theme, Layout = ns.UI, ns.Theme, ns.Layout
 local C = Theme.colors
 local R = ns.Const.Recipe
 
-local FILTERS = { "all", "missing", "learned" }
 
 local function recipeName(recipe)
     local created = recipe[R.CREATED_ITEM]
@@ -54,7 +53,6 @@ end
 -------------------------------------------------------------------------------
 
 function View:Build(frame)
-    self.filter = "all"
     self.query = ""
     local left, center, right = Layout.Columns(frame, 300, 380)
 
@@ -76,14 +74,8 @@ function View:Build(frame)
     self.catalogue = UI.Text(center, 16, C.gold)
     self.catalogue:SetPoint("TOPLEFT", 18, -84)
 
-    local options = {}
-    for _, filter in ipairs(FILTERS) do options[#options + 1] = { value = filter, label = L["FILTER_" .. filter:upper()] } end
-    self.filters = UI.ButtonGroup(center, 92, 22, options, function(value)
-        self.filter = value
-        self:RefreshRecipes()
-    end)
+    self.filters = UI.StateFilter(center, "recipes", function() self:RefreshRecipes() end)
     self.filters:SetPoint("TOPLEFT", 18, -112)
-    self.filters:Select("all")
     local search = UI.SearchBox(center, L.SEARCH_RECIPE, function(text)
         self.query = text
         self:RefreshRecipes()
@@ -263,9 +255,7 @@ function View:RefreshRecipes()
     end
     local items = {}
     for _, recipe in ipairs(profession.recipes) do
-        local known = self.known[recipe[R.SPELL]]
-        local keep = self.filter == "all" or (self.filter == "learned" and known) or (self.filter == "missing" and not known)
-        if keep and (self.query == "" or UI.Matches(recipeName(recipe), self.query)) then items[#items + 1] = recipe end
+        if self.filters:Keeps(self.known[recipe[R.SPELL]]) and (self.query == "" or UI.Matches(recipeName(recipe), self.query)) then items[#items + 1] = recipe end
     end
     self.recipes:SetItems(items, true)
     self.recipeCount:SetText(string.format(L.RECIPES_LISTED, #items))

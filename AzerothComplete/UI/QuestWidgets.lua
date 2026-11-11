@@ -56,13 +56,21 @@ local function sharedPrefix(chains)
     return nil
 end
 
--- Turns chains into list items for a view. `expanded[rootID]` opens a chain.
-function QuestWidgets.BuildItems(chains, view, expanded, query)
+-- Turns chains into list items for a view. `expanded[rootID]` opens a chain. A state
+-- `filter` (UI.StateFilter) narrows the quests listed; the counts keep them all.
+function QuestWidgets.BuildItems(chains, view, expanded, query, filter)
     local items = {}
     local prefix = sharedPrefix(chains)
     for _, chain in ipairs(chains) do
         local summary = ns.Quests:ChainSummary(chain, view)
         local visible = summary.quests
+        if filter then
+            local kept = {}
+            for _, questID in ipairs(visible) do
+                if filter:Keeps(ns.Quests:Status(questID, view) == Status.DONE) then kept[#kept + 1] = questID end
+            end
+            visible = kept
+        end
         if query and query ~= "" then
             local matching = {}
             for _, questID in ipairs(visible) do
@@ -86,9 +94,22 @@ function QuestWidgets.BuildItems(chains, view, expanded, query)
     return items
 end
 
+-- Upper case first letter, including the accented letters of Latin-1 (two bytes in UTF-8,
+-- which the client's string.upper leaves as they are).
+local function capitalize(text)
+    local first, second = text:byte(1, 2)
+    if first and first >= 97 and first <= 122 then
+        return string.char(first - 32) .. text:sub(2)
+    end
+    if first == 0xC3 and second and second >= 0xA0 and second <= 0xBE and second ~= 0xB7 then
+        return string.char(0xC3, second - 0x20) .. text:sub(3)
+    end
+    return text
+end
+
 local function rowName(item)
     local name = questName(item.id)
-    if item.prefix and name:sub(1, #item.prefix) == item.prefix then return name:sub(#item.prefix + 1) end
+    if item.prefix and name:sub(1, #item.prefix) == item.prefix then return capitalize(name:sub(#item.prefix + 1)) end
     return name
 end
 
@@ -192,7 +213,9 @@ local function statusText(status, reason)
         return L.STATUS_DONE
     end
     if status == Status.LOCKED then
-        return reason == "level" and L.STATUS_LOCKED_LEVEL or L.STATUS_LOCKED_PREREQ
+        if reason == "level" then return L.STATUS_LOCKED_LEVEL end
+        if reason == "skill" then return L.STATUS_LOCKED_SKILL end
+        return L.STATUS_LOCKED_PREREQ
     end
     return L["STATUS_" .. status:upper()]
 end

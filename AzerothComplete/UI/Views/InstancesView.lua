@@ -47,8 +47,10 @@ local function newView(kind)
         self.banner = Layout.Banner(center, 150)
         self.banner:SetPoint("TOPLEFT", 16, -52)
         self.banner:SetPoint("TOPRIGHT", -16, -52)
+        self.filters = UI.StateFilter(center, kind == Kind.RAID and "raids" or "dungeons", function() self:Refresh() end)
+        self.filters:SetPoint("TOPLEFT", self.banner, "BOTTOMLEFT", 0, -10)
         self.entries = UI.ScrollList(center, 32, buildEntryRow, function(row, item) self:FillEntry(row, item) end, 3)
-        self.entries:SetPoint("TOPLEFT", self.banner, "BOTTOMLEFT", 0, -12)
+        self.entries:SetPoint("TOPLEFT", self.filters, "BOTTOMLEFT", 0, -8)
         self.entries:SetPoint("BOTTOMRIGHT", -8, 14)
 
         Layout.Title(right, L.DETAILS, 20)
@@ -77,11 +79,16 @@ local function newView(kind)
     -- Entries of the middle list: a bosses header and bosses, then a quests header and quests.
     function View:BuildEntries(instance, view)
         local items = {}
-        if #instance.bosses > 0 then
-            items[#items + 1] = { kind = "header", text = L.BOSSES }
-            for _, encounterID in ipairs(instance.bosses) do items[#items + 1] = { kind = "boss", id = encounterID } end
+        local defeated = ns.Instances:Defeated(view.tracking)
+        local bosses = {}
+        for _, encounterID in ipairs(instance.bosses) do
+            if self.filters:Keeps(defeated[encounterID]) then bosses[#bosses + 1] = { kind = "boss", id = encounterID } end
         end
-        local questItems = QuestWidgets.BuildItems(instance.chains, view, self.expanded)
+        if #bosses > 0 then
+            items[#items + 1] = { kind = "header", text = L.BOSSES }
+            for _, boss in ipairs(bosses) do items[#items + 1] = boss end
+        end
+        local questItems = QuestWidgets.BuildItems(instance.chains, view, self.expanded, nil, self.filters)
         if #questItems > 0 then
             items[#items + 1] = { kind = "header", text = L.QUESTS }
             for _, item in ipairs(questItems) do items[#items + 1] = item end
