@@ -85,6 +85,20 @@ lua5.1 tests/run.lua
 AC_TEST_LOCALE=frFR lua5.1 tests/run.lua
 ```
 
+To try a change in the game, copy `.env.example` to `.env` (ignored by git) and set
+`WOW_GAME_DIR` to your `_forever_` folder, the one that holds `Interface/AddOns`. Then
+`tools/install.sh` copies the addon there as a release would lay it out, with the commit in
+place of the version so that the log tells which revision is running. A directory given as
+argument takes precedence over `.env`:
+
+```sh
+tools/install.sh
+tools/install.sh "D:/Games/World of Warcraft/_forever_"
+```
+
+Lua changes are picked up by `/reload`; a change to the TOC or a new file requires restarting
+the game.
+
 The emblem texture is produced from `art/emblem.png` by `python -I tools/make_emblem.py`.
 
 ## Releases

@@ -8,3 +8,6 @@ dist/
 # Python
 __pycache__/
 *.pyc
+
+# Local settings of the development tools (see .env.example)
+.env

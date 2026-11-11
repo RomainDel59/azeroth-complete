@@ -77,7 +77,10 @@ accepts only real widget methods, so it catches calls the game would reject; a w
 client API newly used by the addon is added to the stub. Any logged error or missing translation
 fails the run. On Windows, QuestieDB's bundled `tools/lua-binary/lua.exe` is a suitable Lua 5.1.
 The game itself cannot be launched from here: in-game checks are done by the user, then read
-back from the log.
+back from the log. `tools/install.sh` (IntelliJ run configuration "Install on Forever") copies
+the addon into the game as a release would, stamping the TOC with the commit; the game directory
+is machine-specific and private, so it comes from `WOW_GAME_DIR` in the untracked `.env`, whose
+template is `.env.example`.
 
 ## Releases
 
