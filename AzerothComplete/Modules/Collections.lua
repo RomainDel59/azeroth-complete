@@ -30,12 +30,26 @@ readers.mounts = function()
     return entries
 end
 
+local unnamedPetLogged = false
+
 readers.pets = function()
     local journal = C_PetJournal
     if not (journal and journal.GetPetInfoBySpeciesID) then return nil end
     local entries = {}
     for _, speciesID in ipairs(ns.Data.Collections.pets) do
         local name, icon, _, _, source, description, _, _, _, _, obtainable = journal.GetPetInfoBySpeciesID(speciesID)
+        if name ~= nil and type(name) ~= "string" then
+            -- Some species of the client tables come back with another value as their name:
+            -- they are left out, and the first one is described once in the log.
+            if not unnamedPetLogged then
+                unnamedPetLogged = true
+                local returns = { journal.GetPetInfoBySpeciesID(speciesID) }
+                local types = {}
+                for i = 1, select("#", journal.GetPetInfoBySpeciesID(speciesID)) do types[i] = type(returns[i]) end
+                ns.Log:Info("Pet species %d has no text name; the client returns: %s", speciesID, table.concat(types, ", "))
+            end
+            name = nil
+        end
         if name and obtainable ~= false then
             local owned = journal.GetNumCollectedInfo and journal.GetNumCollectedInfo(speciesID) or 0
             entries[#entries + 1] = { id = speciesID, name = name, icon = icon, collected = (owned or 0) > 0,
