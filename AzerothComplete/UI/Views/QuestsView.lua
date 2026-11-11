@@ -18,25 +18,33 @@ local GROUP_BUTTONS = {
     { value = "categories", label = "CONTINENT_CATEGORIES", continents = { Continent.CATEGORIES } },
 }
 
+-- Continent maps that stand for a zone whose own artwork cannot be drawn.
+local CONTINENT_MAPS = { [Continent.EASTERN_KINGDOMS] = 1415, [Continent.KALIMDOR] = 1414 }
+local WORLD_MAP = 947
+
 -------------------------------------------------------------------------------
 -- Zone cards
 -------------------------------------------------------------------------------
 
+-- Artwork of a zone or a category: the zone map, or the loading screen chosen by the data
+-- for a zone without a map, or the icon of a category; a zone that has none of them shows
+-- its continent, darkened.
+local function ShowGroupArt(art, group)
+    if group.art and group.art ~= 0 then
+        if art:SetFile(group.art) then return end
+    elseif group.art == nil and group.uiMap and art:SetMap(group.uiMap) then
+        return
+    end
+    if group.icon and art:SetIcon(Theme.icons[group.icon]) then return end
+    if group.kind == "zone" and group.continent ~= Continent.CATEGORIES
+        and art:SetMap(CONTINENT_MAPS[group.continent] or WORLD_MAP, true) then
+        return
+    end
+    art:Clear()
+end
+
 local function buildZoneCard(row)
-    row.art = UI.Art(row)
-    row.art:SetPoint("TOPLEFT", 1, -1)
-    row.art:SetPoint("BOTTOMRIGHT", -1, 1)
-    row.art.shadeFraction = 0.75
-    row.border = UI.Border(row, C.borderDim, 2)
-    row.name = UI.Text(row, 14, C.text)
-    row.name:SetPoint("BOTTOMLEFT", 12, 8)
-    row.count = UI.Text(row, 13, C.text, "body", "RIGHT")
-    row.count:SetPoint("BOTTOMRIGHT", -12, 8)
-    row.name:SetPoint("BOTTOMRIGHT", row.count, "BOTTOMLEFT", -6, 0)
-    row.levels = UI.Text(row, 11, C.goldDim, "body", "RIGHT")
-    row.levels:SetPoint("TOPRIGHT", -10, -6)
-    row.hover = UI.Solid(row, "HIGHLIGHT", { 1, 0.85, 0.45, 0.08 })
-    row.hover:SetAllPoints()
+    UI.ArtCard(row)
 end
 
 function View:FillZoneCard(row, group)
@@ -46,7 +54,7 @@ function View:FillZoneCard(row, group)
     local complete = summary.total > 0 and summary.done >= summary.total
     row.count:SetTextColor(Theme.Unpack(complete and C.green or C.text))
     row.levels:SetText(group.levels and QuestWidgets.LevelText(group.levels[1], group.levels[2]) or "")
-    if not (group.uiMap and row.art:SetMap(group.uiMap)) then row.art:Clear() end
+    ShowGroupArt(row.art, group)
     local selected = self.selectedGroup == group
     row.border:SetColor(selected and C.gold or (complete and C.greenBorder or C.borderDim))
     row:SetScript("OnClick", function() self:SelectGroup(group) end)
@@ -81,7 +89,7 @@ function View:Build(frame)
     search:SetPoint("TOPLEFT", 16, -116)
     search:SetPoint("TOPRIGHT", -16, -116)
 
-    self.zones = UI.ScrollList(left, 76, buildZoneCard, function(row, group) self:FillZoneCard(row, group) end, 8)
+    self.zones = UI.ScrollList(left, UI.ART_CARD_HEIGHT, buildZoneCard, function(row, group) self:FillZoneCard(row, group) end, 6)
     self.zones:SetPoint("TOPLEFT", 16, -152)
     self.zones:SetPoint("BOTTOMRIGHT", -8, 12)
 
@@ -126,21 +134,30 @@ end
 -- Selection
 -------------------------------------------------------------------------------
 
--- Starts on the continent of the zone the player is in.
+-- Starts on the zone the player is in. The client reports the most precise map, which may
+-- be a building or a cave inside the zone: its parents are tried in turn.
 function View:InitialContinent()
-    local uiMap = C_Map and C_Map.GetBestMapForUnit and C_Map.GetBestMapForUnit("player")
+    local maps = ns.Compat.GetPlayerMaps()
+    local byMap = {}
     for _, groups in pairs(ns.Quests:Groups()) do
         for _, group in ipairs(groups) do
-            if uiMap and group.uiMap == uiMap then
-                self.selectedGroup = group
-                for _, option in ipairs(GROUP_BUTTONS) do
-                    for _, continent in ipairs(option.continents) do
-                        if continent == group.continent then return option.value end
+            if group.uiMap then byMap[group.uiMap] = group end
+        end
+    end
+    for _, uiMap in ipairs(maps) do
+        local group = byMap[uiMap]
+        if group then
+            for _, option in ipairs(GROUP_BUTTONS) do
+                for _, continent in ipairs(option.continents) do
+                    if continent == group.continent then
+                        self.selectedGroup = group
+                        return option.value
                     end
                 end
             end
         end
     end
+    ns.Log:Info("No quest zone matches the player's maps [%s]", table.concat(maps, ", "))
     return ns.Player.faction == ns.Const.Faction.HORDE and "kalimdor" or "ek"
 end
 
@@ -156,9 +173,14 @@ function View:GroupsOf(continentValue)
     for _, continent in ipairs(option.continents) do
         for _, group in ipairs(all[continent] or {}) do groups[#groups + 1] = group end
     end
+    -- Lowest levels first: by minimum level, then maximum level; categories by name.
     table.sort(groups, function(a, b)
-        local la, lb = a.levels and a.levels[1] or 99, b.levels and b.levels[1] or 99
-        if a.kind ~= "sort" and la ~= lb then return la < lb end
+        if a.continent ~= Continent.CATEGORIES and b.continent ~= Continent.CATEGORIES then
+            local minA, minB = a.levels and a.levels[1] or 99, b.levels and b.levels[1] or 99
+            if minA ~= minB then return minA < minB end
+            local maxA, maxB = a.levels and a.levels[2] or 99, b.levels and b.levels[2] or 99
+            if maxA ~= maxB then return maxA < maxB end
+        end
         return ns.Quests:GroupName(a) < ns.Quests:GroupName(b)
     end)
     self.sortedGroups[continentValue] = groups
@@ -173,7 +195,17 @@ function View:SelectContinent(value, initial)
     for _, group in ipairs(groups) do
         if group == self.selectedGroup then keep = true end
     end
-    if not keep then self.selectedGroup = groups[1] end
+    -- Without the player's zone, the first zone that has quests for the current view.
+    if not keep then
+        local view = self.mainFrame:View()
+        self.selectedGroup = groups[1]
+        for _, group in ipairs(groups) do
+            if ns.Quests:Summary(group.kind .. ":" .. group.id, group.chains, view).total > 0 then
+                self.selectedGroup = group
+                break
+            end
+        end
+    end
     self:RefreshZones()
     self:SelectGroup(self.selectedGroup, initial)
 end
@@ -266,7 +298,7 @@ function View:Refresh()
     local trackingName = view.tracking == ns.Const.Tracking.ACCOUNT and L.TRACKING_ACCOUNT or L.TRACKING_CHARACTER
     banner.caption:SetText(string.format(L.QUESTS_CAPTION, summary.done, summary.total, trackingName))
     banner.ring:SetProgress(summary.done, summary.total, summary.total > 0 and summary.done >= summary.total and L.COMPLETE or L.DONE)
-    if not (group.uiMap and banner.art:SetMap(group.uiMap)) then banner.art:Clear() end
+    ShowGroupArt(banner.art, group)
 
     self:RefreshQuests()
     if self.selectedQuest then

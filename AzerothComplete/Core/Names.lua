@@ -183,9 +183,14 @@ function Names.Object(objectID)
     return row and row[1]
 end
 
+-- A quest zone is named after its map, as the world map shows it: some area names of the
+-- localized clients add the English name in parentheses. Other areas keep their own name.
 function Names.Area(areaID)
     if not areaID then return nil end
-    return ns.Compat.GetAreaName(areaID) or ns:GameString("areas", areaID)
+    local zone = ns.Data.Zones[areaID]
+    local uiMap = zone and zone.uiMap
+    local mapName = uiMap and (ns.Compat.GetMapName(uiMap) or ns:GameString("maps", uiMap))
+    return mapName or ns.Compat.GetAreaName(areaID) or ns:GameString("areas", areaID)
 end
 
 function Names.Instance(mapID, areaID)

@@ -215,6 +215,27 @@ function Compat.GetMapArt(uiMapID)
     return layer, textures
 end
 
+-- Name of a map as the world map shows it.
+function Compat.GetMapName(uiMapID)
+    local info = C_Map and C_Map.GetMapInfo and C_Map.GetMapInfo(uiMapID)
+    local name = info and info.name
+    if name and name ~= "" then return name end
+    return nil
+end
+
+-- Maps the player is in, from the most precise (a building, a cave) up to its zone and
+-- continent; empty when the client cannot tell.
+function Compat.GetPlayerMaps()
+    local maps = {}
+    local uiMapID = C_Map and C_Map.GetBestMapForUnit and C_Map.GetBestMapForUnit("player")
+    while uiMapID and uiMapID ~= 0 and #maps < 10 do
+        maps[#maps + 1] = uiMapID
+        local info = C_Map.GetMapInfo and C_Map.GetMapInfo(uiMapID)
+        uiMapID = info and info.parentMapID
+    end
+    return maps
+end
+
 -- Places a user waypoint on the world map; returns false when the client cannot.
 function Compat.SetWaypoint(uiMapID, x, y)
     if not (C_Map and C_Map.SetUserWaypoint and UiMapPoint and C_Map.CanSetUserWaypointOnMap) then return false end

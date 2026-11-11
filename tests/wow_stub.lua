@@ -52,6 +52,11 @@ function Widget:SetWidth(width) self._width = width end
 function Widget:SetHeight(height) self._height = height end
 function Widget:GetWidth() return self._width or 400 end
 function Widget:GetHeight() return self._height or 300 end
+function Widget:GetFrameLevel()
+    local level, parent = 0, self._parent
+    while parent do level, parent = level + 1, parent._parent end
+    return level
+end
 function Widget:GetEffectiveScale() return 1 end
 function Widget:GetCenter() return 500, 400 end
 function Widget:GetPoint() return "CENTER", nil, "CENTER", 0, 0 end
@@ -243,7 +248,12 @@ function IsPlayerSpell(spellID) return spellID == 2660 or spellID == 2663 end
 
 C_Map = {}
 function C_Map.GetAreaInfo(areaID) return "Area " .. areaID end
-function C_Map.GetBestMapForUnit() return 1429 end
+-- The player stands in a building (2000) of Elwynn Forest (1429), in the Eastern Kingdoms (1415).
+function C_Map.GetBestMapForUnit() return 2000 end
+function C_Map.GetMapInfo(uiMapID)
+    local parents = { [2000] = 1429, [1429] = 1415, [1415] = 947 }
+    return { mapID = uiMapID, name = "Map " .. uiMapID, parentMapID = parents[uiMapID] or 0 }
+end
 function C_Map.GetMapArtLayers() return { { layerWidth = 1002, layerHeight = 668, tileWidth = 256, tileHeight = 256 } } end
 function C_Map.GetMapArtLayerTextures() return { 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12 } end
 function C_Map.CanSetUserWaypointOnMap() return true end

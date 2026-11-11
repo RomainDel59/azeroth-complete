@@ -11,20 +11,7 @@ local Kind = ns.Const.Instance
 local LOADING_SCREEN_RATIO = 16 / 9
 
 local function buildInstanceCard(row)
-    row.art = UI.Art(row)
-    row.art:SetPoint("TOPLEFT", 1, -1)
-    row.art:SetPoint("BOTTOMRIGHT", -1, 1)
-    row.art.shadeFraction = 0.8
-    row.border = UI.Border(row, C.borderDim, 2)
-    row.name = UI.Text(row, 14, C.text)
-    row.name:SetPoint("BOTTOMLEFT", 12, 8)
-    row.count = UI.Text(row, 13, C.text, "body", "RIGHT")
-    row.count:SetPoint("BOTTOMRIGHT", -12, 8)
-    row.name:SetPoint("BOTTOMRIGHT", row.count, "BOTTOMLEFT", -6, 0)
-    row.levels = UI.Text(row, 11, C.goldDim, "body", "RIGHT")
-    row.levels:SetPoint("TOPRIGHT", -10, -6)
-    row.hover = UI.Solid(row, "HIGHLIGHT", { 1, 0.85, 0.45, 0.08 })
-    row.hover:SetAllPoints()
+    UI.ArtCard(row)
 end
 
 local function buildEntryRow(row)
@@ -49,9 +36,9 @@ local function newView(kind)
         end)
         search:SetPoint("TOPLEFT", 16, -48)
         search:SetPoint("TOPRIGHT", -16, -48)
-        self.instances = UI.ScrollList(left, 76, buildInstanceCard, function(row, instance)
+        self.instances = UI.ScrollList(left, UI.ART_CARD_HEIGHT, buildInstanceCard, function(row, instance)
             self:FillCard(row, instance)
-        end, 8)
+        end, 6)
         self.instances:SetPoint("TOPLEFT", 16, -86)
         self.instances:SetPoint("BOTTOMRIGHT", -8, 12)
 

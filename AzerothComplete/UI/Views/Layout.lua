@@ -54,17 +54,18 @@ function Layout.Banner(parent, height)
     banner.art = UI.Art(banner)
     banner.art:SetAllPoints()
     banner.art.shadeFraction = 0.7
-    UI.Border(banner, ns.Theme.colors.border)
-    banner.name = UI.Text(banner, 20, ns.Theme.colors.gold, "body")
+    local overlay = banner.art.overlay
+    UI.Border(overlay, ns.Theme.colors.border)
+    banner.name = UI.ArtText(overlay, 20, ns.Theme.colors.gold, "body")
     banner.name:SetPoint("TOPLEFT", 16, -16)
     banner.name:SetPoint("TOPRIGHT", -150, -16)
-    banner.subtitle = UI.Text(banner, 13, ns.Theme.colors.text)
+    banner.subtitle = UI.ArtText(overlay, 13, ns.Theme.colors.text)
     banner.subtitle:SetPoint("TOPLEFT", banner.name, "BOTTOMLEFT", 0, -6)
     banner.subtitle:SetPoint("TOPRIGHT", banner.name, "BOTTOMRIGHT", 0, -6)
-    banner.caption = UI.Text(banner, 15, ns.Theme.colors.text)
+    banner.caption = UI.ArtText(overlay, 15, ns.Theme.colors.text)
     banner.caption:SetPoint("BOTTOMLEFT", 16, 14)
     banner.caption:SetPoint("BOTTOMRIGHT", -150, 14)
-    banner.ring = UI.ProgressRing(banner, math.min(130, height - 20))
+    banner.ring = UI.ProgressRing(overlay, math.min(130, height - 20))
     banner.ring:SetPoint("RIGHT", -16, 0)
     return banner
 end

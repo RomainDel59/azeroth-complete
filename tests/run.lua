@@ -43,6 +43,8 @@ end
 
 local fileCount = loadToc()
 Stub.Fire("ADDON_LOADED", ADDON)
+-- The client fires some events before the login, when no character record exists yet.
+Stub.Fire("SKILL_LINES_CHANGED")
 Stub.Fire("PLAYER_LOGIN")
 Stub.Advance(1)
 
@@ -73,6 +75,14 @@ check(ns.Quests:Status(18, view) == "active", "quest 18 is in the log")
 Stub.Fire("QUEST_TURNED_IN", 18)
 Stub.Advance(1)
 check(ns.Quests:Status(18, view) == "done", "a turned-in quest becomes done")
+
+-- Zones are named after their map, as the world map shows them; without a map name from the
+-- client, the shipped one is used.
+check(ns.Names.Area(40) == "Map 1436", "a zone is named after its map")
+local getMapInfo = C_Map.GetMapInfo
+C_Map.GetMapInfo = function() return nil end
+check(ns.Names.Area(40) == ns.Data.Strings[GetLocale()].maps[1436], "a zone falls back to the shipped map name")
+C_Map.GetMapInfo = getMapInfo
 
 -- Names: first lookup pending, then answered by the server
 local pendingTitle = ns.Names.Quest(176)
@@ -110,6 +120,53 @@ local questsView = ns.MainFrame.activeView
 for _, value in ipairs({ "kalimdor", "other", "categories", "ek" }) do questsView:SelectContinent(value) end
 check(#questsView.zones.items > 0, "the zone list is not empty")
 check(#questsView.quests.items > 0, "the quest list of the selected zone is not empty")
+-- The player stands in a building of Elwynn Forest: the zone is found through the parent maps.
+questsView.selectedGroup = nil
+check(questsView:InitialContinent() == "ek" and questsView.selectedGroup and questsView.selectedGroup.id == 12,
+    "the zone the player is in is selected first")
+-- Artwork of the zones without a map of their own, and of the areas that only name quests.
+local function findGroup(continentValue, id)
+    for _, group in ipairs(questsView:GroupsOf(continentValue)) do
+        if group.id == id then return group end
+    end
+end
+local crafting = findGroup("categories", 16941)
+check(crafting and not findGroup("ek", 16941), "an area that only names quests is listed among the categories")
+local artOf = function(group)
+    questsView:SelectGroup(group)
+    return questsView.banner.art.request
+end
+check(artOf(crafting).kind == "icon", "a category area shows its icon")
+check(artOf(findGroup("ek", 25)).kind == "file", "Blackrock Mountain shows the loading screen of its instances")
+local noArt = { kind = "zone", id = 12, continent = ns.Const.Continent.EASTERN_KINGDOMS, chains = {}, art = 0 }
+local request = artOf(noArt)
+check(request.kind == "map" and request.dimmed and request.key:find("1415", 1, true),
+    "a zone without any artwork shows its continent, darkened")
+questsView:SelectContinent("ek")
+
+-- One wheel notch moves the zone cards one by one.
+questsView.zones:SetItems(questsView.zones.items)
+questsView.zones:Scroll(1)
+check(questsView.zones.offset == 1, "a wheel notch scrolls the zone list by one card (moved %d)", questsView.zones.offset)
+local previousMin, previousMax = 0, 0
+for _, group in ipairs(questsView:GroupsOf("ek")) do
+    local low, high = group.levels and group.levels[1] or 99, group.levels and group.levels[2] or 99
+    check(low > previousMin or (low == previousMin and high >= previousMax),
+        "zones are sorted by level (zone %d)", group.id)
+    previousMin, previousMax = low, high
+end
+
+-- A collection API answering in another order puts a non-text value in a name.
+local getPetInfo = C_PetJournal.GetPetInfoBySpeciesID
+C_PetJournal.GetPetInfoBySpeciesID = function(id)
+    if id == ns.Data.Collections.pets[1] then return getPetInfo, 132599 end
+    return getPetInfo(id)
+end
+ns.Collections:Invalidate("pets")
+local pets = ns.Collections:Entries("pets")
+C_PetJournal.GetPetInfoBySpeciesID = getPetInfo
+ns.Collections:Invalidate("pets")
+check(pets and #pets > 0, "a collection keeps its valid entries when one name is not a text")
 
 -- Every tab has content
 local expectations = {

@@ -21,6 +21,8 @@ local PROBES = {
     { "Professions", "GetProfessions|GetNumSkillLines" },
     { "Area names", "C_Map.GetAreaInfo" },
     { "Map art", "C_Map.GetMapArtLayerTextures" },
+    { "Player map", "C_Map.GetBestMapForUnit" },
+    { "Map hierarchy", "C_Map.GetMapInfo" },
     { "Waypoints", "C_Map.SetUserWaypoint" },
     { "Tooltip data", "C_TooltipInfo.GetHyperlink" },
     { "Factions", "C_Reputation.GetFactionDataByID|GetFactionInfoByID" },

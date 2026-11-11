@@ -55,6 +55,13 @@ function UI.Text(parent, size, color, family, justify, layer)
     return text
 end
 
+-- Text drawn over artwork: a black outline keeps it readable on light areas of the image.
+function UI.ArtText(parent, size, color, family, justify)
+    local text = UI.Text(parent, size, color, family, justify)
+    text:SetFont(Theme.fonts[family or "body"], size or 12, "OUTLINE")
+    return text
+end
+
 -- Text that wraps on several lines inside a fixed width.
 function UI.Paragraph(parent, size, color, width)
     local text = UI.Text(parent, size, color)
@@ -298,7 +305,10 @@ end
 -------------------------------------------------------------------------------
 
 -- Frame that crops artwork to its own bounds. SetMap shows the world map art of a zone,
--- SetFile a single texture (a loading screen); without art, a gradient remains.
+-- SetFile a single texture (a loading screen), SetIcon an icon in the middle; without art,
+-- a gradient remains.
+-- The game draws every child frame above the regions of its parent, so texts and borders
+-- created on the parent would be hidden by the artwork: they belong on `frame.overlay`.
 function UI.Art(parent)
     local frame = CreateFrame("Frame", nil, parent)
     frame:SetClipsChildren(true)
@@ -307,7 +317,11 @@ function UI.Art(parent)
     frame.canvas = CreateFrame("Frame", nil, frame)
     frame.canvas:SetPoint("CENTER")
     frame.tiles = {}
-    frame.shade = frame:CreateTexture(nil, "OVERLAY", nil, -1)
+    frame.exploration = {}
+    frame.overlay = CreateFrame("Frame", nil, frame)
+    frame.overlay:SetAllPoints()
+    frame.overlay:SetFrameLevel(frame.canvas:GetFrameLevel() + 1)
+    frame.shade = frame.overlay:CreateTexture(nil, "BACKGROUND")
     frame.shade:SetPoint("BOTTOMLEFT")
     frame.shade:SetPoint("BOTTOMRIGHT")
     frame.shade:SetColorTexture(0, 0, 0, 1)
@@ -319,6 +333,7 @@ function UI.Art(parent)
 
     local function hideTiles()
         for _, tile in ipairs(frame.tiles) do tile:Hide() end
+        for _, tile in ipairs(frame.exploration) do tile:Hide() end
     end
 
     function frame.SetShade(_, fraction)
@@ -337,8 +352,48 @@ function UI.Art(parent)
         frame.request = nil
     end
 
+    -- Size of a tile file: full tiles are 256 pixels, the last one of a row or column is the
+    -- smallest power of two that holds the remainder, as the game lays them out.
+    local OVERLAY_TILE = 256
+    local function tileExtent(index, count, total)
+        if index < count - 1 then return OVERLAY_TILE, OVERLAY_TILE end
+        local pixels = total - OVERLAY_TILE * (count - 1)
+        local file = 16
+        while file < pixels do file = file * 2 end
+        return pixels, file
+    end
+
+    -- Exploration overlays: the painted areas the game reveals over the bare parchment.
+    local function drawExploration(overlays, scale)
+        local used = 0
+        for _, overlay in ipairs(overlays or {}) do
+            local width, height, offsetX, offsetY, files = overlay[1], overlay[2], overlay[3], overlay[4], overlay[5]
+            local columns = math.ceil(width / OVERLAY_TILE)
+            local rows = math.ceil(height / OVERLAY_TILE)
+            for index, fileID in ipairs(files) do
+                used = used + 1
+                local tile = frame.exploration[used]
+                if not tile then
+                    tile = frame.canvas:CreateTexture(nil, "BACKGROUND", nil, 2)
+                    frame.exploration[used] = tile
+                end
+                local column = (index - 1) % columns
+                local row = math.floor((index - 1) / columns)
+                local pixelWidth, fileWidth = tileExtent(column, columns, width)
+                local pixelHeight, fileHeight = tileExtent(row, rows, height)
+                tile:ClearAllPoints()
+                tile:SetSize(pixelWidth * scale, pixelHeight * scale)
+                tile:SetPoint("TOPLEFT", frame.canvas, "TOPLEFT", (offsetX + column * OVERLAY_TILE) * scale,
+                    -(offsetY + row * OVERLAY_TILE) * scale)
+                tile:SetTexture(fileID)
+                tile:SetTexCoord(0, pixelWidth / fileWidth, 0, pixelHeight / fileHeight)
+                tile:Show()
+            end
+        end
+    end
+
     -- Map tiles are laid out on a canvas that covers the frame, centered, keeping the ratio.
-    local function drawMap(layer, textures)
+    local function drawMap(layer, textures, overlays, dimmed)
         local width, height = frame:GetWidth(), frame:GetHeight()
         local columns = math.ceil(layer.layerWidth / layer.tileWidth)
         local scale = math.max(width / layer.layerWidth, height / layer.layerHeight)
@@ -357,8 +412,10 @@ function UI.Art(parent)
             tile:SetPoint("TOPLEFT", frame.canvas, "TOPLEFT", column * tileW, -row * tileH)
             tile:SetTexture(fileID)
             tile:SetTexCoord(0, 1, 0, 1)
+            tile:SetVertexColor(dimmed and 0.45 or 1, dimmed and 0.45 or 1, dimmed and 0.45 or 1)
             tile:Show()
         end
+        drawExploration(overlays, scale)
     end
 
     local function drawFile(fileID, ratio)
@@ -371,6 +428,21 @@ function UI.Art(parent)
         tile:SetAllPoints(frame.canvas)
         tile:SetTexture(fileID)
         tile:SetTexCoord(0, 1, 0, 1)
+        tile:SetVertexColor(1, 1, 1)
+        tile:Show()
+    end
+
+    -- An icon is too small to cover the frame: it stands in the middle, its border cropped.
+    local function drawIcon(path)
+        local tile = frame.tiles[1] or frame.canvas:CreateTexture(nil, "BACKGROUND", nil, 1)
+        frame.tiles[1] = tile
+        local size = math.max(1, math.min(frame:GetWidth(), frame:GetHeight()) - 12)
+        frame.canvas:SetSize(size, size)
+        tile:ClearAllPoints()
+        tile:SetAllPoints(frame.canvas)
+        tile:SetTexture(path)
+        tile:SetTexCoord(0.08, 0.92, 0.08, 0.92)
+        tile:SetVertexColor(0.8, 0.8, 0.8)
         tile:Show()
     end
 
@@ -379,20 +451,24 @@ function UI.Art(parent)
         if not request or not sized() then return end
         hideTiles()
         if request.kind == "map" then
-            drawMap(request.layer, request.textures)
+            drawMap(request.layer, request.textures, request.overlays, request.dimmed)
+        elseif request.kind == "icon" then
+            drawIcon(request.path)
         else
             drawFile(request.fileID, request.ratio)
         end
     end
 
-    -- Shows the world map art of a zone; returns false when the client has none for it.
-    function frame.SetMap(_, uiMapID)
-        local key = "map:" .. tostring(uiMapID)
+    -- Shows the world map art of a zone, fully explored, darkened when `dimmed` (a
+    -- continent standing for a zone); returns false when the client has none for it.
+    function frame.SetMap(_, uiMapID, dimmed)
+        local key = "map:" .. tostring(uiMapID) .. (dimmed and ":dimmed" or "")
         if frame.request and frame.request.key == key then return true end
         local layer, textures
         if uiMapID then layer, textures = ns.Compat.GetMapArt(uiMapID) end
         if not layer then return false end
-        frame.request = { key = key, kind = "map", layer = layer, textures = textures }
+        frame.request = { key = key, kind = "map", layer = layer, textures = textures, dimmed = dimmed,
+            overlays = ns.Data.MapOverlays and ns.Data.MapOverlays[uiMapID] }
         draw()
         return true
     end
@@ -407,11 +483,51 @@ function UI.Art(parent)
         return true
     end
 
+    -- Shows an icon (a texture path or file) in the middle of the frame.
+    function frame.SetIcon(_, path)
+        if not path then return false end
+        local key = "icon:" .. tostring(path)
+        if frame.request and frame.request.key == key then return true end
+        frame.request = { key = key, kind = "icon", path = path }
+        draw()
+        return true
+    end
+
     frame:SetScript("OnSizeChanged", function()
         draw()
         frame:SetShade(frame.shadeFraction or 0.6)
     end)
     return frame
+end
+
+-- List card with artwork, as high as its two lines of text: the name across the top, the
+-- level range and the count below it, with a border and a hover glow, all drawn above the
+-- artwork, which is darkened from the bottom up to keep both lines readable.
+UI.ART_CARD_HEIGHT = 46
+
+function UI.ArtCard(row)
+    row.art = UI.Art(row)
+    row.art:SetAllPoints()
+    row.art.shadeFraction = 1
+    if row.art.shade.SetGradient and CreateColor then
+        row.art.shade:SetGradient("VERTICAL", CreateColor(0, 0, 0, 0.8), CreateColor(0, 0, 0, 0.4))
+    end
+    local overlay = row.art.overlay
+    row.border = UI.Border(overlay, C.borderDim, 2)
+    row.name = UI.ArtText(overlay, 14, C.text)
+    row.name:SetPoint("TOPLEFT", 10, -7)
+    row.name:SetPoint("TOPRIGHT", -10, -7)
+    row.count = UI.ArtText(overlay, 12, C.text, "body", "RIGHT")
+    row.count:SetPoint("BOTTOMRIGHT", -10, 7)
+    row.levels = UI.ArtText(overlay, 11, C.goldDim)
+    row.levels:SetPoint("BOTTOMLEFT", 10, 7)
+    row.levels:SetPoint("BOTTOMRIGHT", row.count, "BOTTOMLEFT", -6, 0)
+    -- The highlight layer only follows the mouse on the button itself, under the artwork.
+    row.hover = UI.Solid(overlay, "ARTWORK", { 1, 0.85, 0.45, 0.08 })
+    row.hover:SetAllPoints()
+    row.hover:Hide()
+    row:HookScript("OnEnter", function() row.hover:Show() end)
+    row:HookScript("OnLeave", function() row.hover:Hide() end)
 end
 
 -------------------------------------------------------------------------------
@@ -486,9 +602,10 @@ function UI.ScrollList(parent, rowHeight, build, fill, spacing)
         if list.scrollBar:GetValue() ~= list.offset then list.scrollBar:SetValue(list.offset) end
     end
 
+    -- A wheel notch moves one row.
     function list.Scroll(_, delta)
         local maxOffset = math.max(0, #list.items - visibleCount())
-        local offset = math.max(0, math.min(maxOffset, list.offset + delta * 3))
+        local offset = math.max(0, math.min(maxOffset, list.offset + delta))
         if offset ~= list.offset then
             list.offset = offset
             list:Redraw()
