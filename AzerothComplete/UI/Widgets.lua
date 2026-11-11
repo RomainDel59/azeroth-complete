@@ -530,7 +530,25 @@ local function ScrollBar(parent, onScroll)
     track:SetMinMaxValues(0, 0)
     track:SetValueStep(1)
     if track.SetObeyStepOnDrag then track:SetObeyStepOnDrag(true) end
-    track:SetScript("OnValueChanged", function(_, value) onScroll(math.floor(value + 0.5)) end)
+    local muted = false
+    track:SetScript("OnValueChanged", function(_, value)
+        if not muted then onScroll(math.floor(value + 0.5)) end
+    end)
+
+    -- Sets the range and the value. The client places the thumb only when the value changes,
+    -- so a range or a size given while the value stays the same would leave it hidden until
+    -- the first scroll: the value goes to the other end of the range and back, silently.
+    function track.Sync(_, value, maxValue)
+        if maxValue then track:SetMinMaxValues(0, maxValue) end
+        local low, high = track:GetMinMaxValues()
+        value = math.max(low, math.min(high, value or track:GetValue()))
+        muted = true
+        track:SetValue(value == high and low or high)
+        track:SetValue(value)
+        muted = false
+    end
+    track:SetScript("OnSizeChanged", function() track:Sync() end)
+    track:SetScript("OnShow", function() track:Sync() end)
     return track
 end
 
@@ -580,9 +598,8 @@ function UI.ScrollList(parent, rowHeight, build, fill, spacing)
         end
         for i = count + 1, #list.rows do list.rows[i]:Hide() end
         local maxOffset = math.max(0, #list.items - count)
-        list.scrollBar:SetMinMaxValues(0, maxOffset)
         list.scrollBar:SetShown(maxOffset > 0)
-        if list.scrollBar:GetValue() ~= list.offset then list.scrollBar:SetValue(list.offset) end
+        list.scrollBar:Sync(list.offset, maxOffset)
     end
 
     -- A wheel notch moves one row.
@@ -818,14 +835,11 @@ function UI.DetailPanel(parent)
     function scroll.Finish()
         child:SetSize(width(), math.max(1, scroll.y))
         local maxScroll = math.max(0, scroll.y - (scroll:GetHeight() or 0))
-        bar:SetMinMaxValues(0, maxScroll)
         bar:SetShown(maxScroll > 0)
-        if scroll.keptScroll then
-            local value = math.min(scroll.keptScroll, maxScroll)
-            scroll:SetVerticalScroll(value)
-            bar:SetValue(value)
-            scroll.keptScroll = nil
-        end
+        local value = math.min(scroll.keptScroll or scroll:GetVerticalScroll() or 0, maxScroll)
+        scroll:SetVerticalScroll(value)
+        bar:Sync(value, maxScroll)
+        scroll.keptScroll = nil
     end
 
     return scroll
