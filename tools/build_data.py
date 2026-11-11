@@ -88,31 +88,30 @@ TRANSIT_EASTERN_KINGDOMS = {369}
 ZONE_INSTANCES = {
     25: (230, 229),  # Blackrock Mountain: Blackrock Depths, Blackrock Spire
 }
-# Places whose artwork stands for the quest categories other than the classes, which show
-# their talent background: ("map", uiMap) draws a zone map, ("instance", map) shows the
-# loading screen of an instance. Keys are quest sorts, and areas that only name quests.
-CATEGORY_PLACES = {
-    0: ("map", 947),          # Miscellaneous: Azeroth
-    1: ("instance", 469),     # Epic: Blackwing Lair
-    22: ("map", 1426),        # Seasonal: Dun Morogh, under the snow of the Winter Veil
-    24: ("map", 1449),        # Herbalism: Un'Goro Crater
-    101: ("map", 1434),       # Fishing: Stranglethorn Vale, home of the fishing contest
-    121: ("map", 1427),       # Blacksmithing: Searing Gorge, the Thorium Brotherhood
-    181: ("map", 1435),       # Alchemy: Swamp of Sorrows
-    182: ("map", 1444),       # Leatherworking: Feralas
-    201: ("instance", 90),    # Engineering: Gnomeregan
-    264: ("map", 1452),       # Tailoring: Winterspring, the moonwell of the mooncloth
-    284: ("map", 1446),       # Special: Tanaris
-    304: ("map", 1436),       # Cooking: Westfall
-    324: ("map", 1445),       # First Aid: Dustwallow Marsh, the triage of Theramore
-    344: ("instance", 533),   # Legendary: Naxxramas
-    365: ("instance", 531),   # Ahn'Qiraj War: Temple of Ahn'Qiraj
-    366: ("map", 1450),       # Lunar Festival: Moonglade
-    368: ("map", 1423),       # Invasion: Eastern Plaguelands
-    369: ("map", 1428),       # Midsummer: Burning Steppes, for the fires
-    666: ("map", 1440),       # Camping: Ashenvale
-    676: ("map", 1438),       # Night Elf: Teldrassil
-    16941: ("map", 1455),     # Crafting: Ironforge, around its great forge
+# Maps whose loading screen stands for the quest categories other than the classes, which
+# show their talent background. Keys are quest sorts, and areas that only name quests.
+CATEGORY_SCREENS = {
+    0: 0,          # Miscellaneous: Eastern Kingdoms
+    1: 469,        # Epic: Blackwing Lair
+    22: 30,        # Seasonal: Alterac Valley, under the snow of the Winter Veil
+    24: 349,       # Herbalism: Maraudon, its overgrown caverns
+    101: 48,       # Fishing: Blackfathom Deeps
+    121: 230,      # Blacksmithing: Blackrock Depths, the Dark Iron forges
+    181: 289,      # Alchemy: Scholomance, its laboratories
+    182: 429,      # Leatherworking: Dire Maul, in Feralas
+    201: 90,       # Engineering: Gnomeregan
+    264: 329,      # Tailoring: Stratholme, its runecloth and felcloth
+    284: 309,      # Special: Zul'Gurub
+    304: 36,       # Cooking: the Deadmines, a pirate ship galley
+    324: 189,      # First Aid: Scarlet Monastery
+    344: 409,      # Legendary: Molten Core, home of the first legendary weapons
+    365: 531,      # Ahn'Qiraj War: Temple of Ahn'Qiraj
+    366: 1,        # Lunar Festival: Kalimdor, around Moonglade
+    368: 533,      # Invasion: Naxxramas, the Scourge
+    369: 229,      # Midsummer: Blackrock Spire, for the fires
+    666: 37,       # Camping: the forests of Azshara Crater
+    676: 489,      # Night Elf: Warsong Gulch, the Silverwing Sentinels
+    16941: 70,     # Crafting: Uldaman, the titans' workshops
 }
 
 # Name markers of client rows that are not real content.
@@ -580,7 +579,7 @@ def build_quests(world: World, questie: dict, valid_ids: set[int]) -> tuple[dict
         row = {"continent": world.continent_of(area_id), "uiMap": ui_map, **describe(entry["quests"])}
         if not world.is_place(area_id, ui_map):
             row["continent"] = CONTINENT_CATEGORIES
-            row.update(category_place(world, area_id))
+            row.update(category_screen(world, area_id))
         else:
             art = world.zone_art(area_id, ui_map)
             if art is not None:
@@ -602,22 +601,19 @@ def build_quests(world: World, questie: dict, valid_ids: set[int]) -> tuple[dict
     return quests, zone_rows, sort_rows, {"instances": dict(instances), "referenced": referenced}
 
 
-def category_place(world: World, key: int) -> dict:
-    """Artwork of the place chosen for a quest category, if the client can draw it."""
-    kind, place = CATEGORY_PLACES.get(key, (None, None))
-    if kind == "map" and world.map_drawable(place):
-        return {"uiMap": place}
-    if kind == "instance" and world.loading_screen(place):
-        return world.screen_art(world.loading_screen(place))
-    if kind:
-        log(f"WARNING: the place chosen for category {key} cannot be drawn: {kind} {place}")
-    return {}
+def category_screen(world: World, key: int) -> dict:
+    """Loading screen chosen for a quest category, if the client ships it."""
+    map_id = CATEGORY_SCREENS.get(key)
+    file_id = world.loading_screen(map_id) if map_id is not None else 0
+    if map_id is not None and not file_id:
+        log(f"WARNING: the loading screen chosen for category {key} is not shipped: map {map_id}")
+    return world.screen_art(file_id) if file_id else {}
 
 
 def category_art(world: World, sorts: dict) -> dict[int, dict]:
     """Artwork of the quest categories. A class category shows the talent background of the
     class, linked through the English names of the category and the class; any other shows
-    the place chosen for it."""
+    the loading screen chosen for it."""
     cache = world.cache
     sort_names = {to_int(r["ID"]): r["SortName_lang"] for r in read_table(cache, "QuestSort", "enUS")}
     classes = {r["Name_lang"]: to_int(r["ID"]) for r in read_table(cache, "ChrClasses")}
@@ -627,8 +623,6 @@ def category_art(world: World, sorts: dict) -> dict[int, dict]:
             if to_int(row["ClassMask"]) & (1 << (class_id - 1)) and row["BackgroundFile"]:
                 tabs[class_id].append((to_int(row["OrderIndex"]), row["BackgroundFile"]))
     result = {}
-    world.shipped.prefetch(f for kind, place in CATEGORY_PLACES.values() if kind == "map"
-                           for f in world.map_tiles.get(place, []))
     for sort_id in sorts:
         for _, background in sorted(tabs.get(classes.get(sort_names.get(sort_id)), [])):
             file_id = world.shipped.file_id(f"interface/talentframe/{background}-topleft.blp")
@@ -637,11 +631,11 @@ def category_art(world: World, sorts: dict) -> dict[int, dict]:
                 result[sort_id] = {"art": file_id, "artRatio": 1}
                 break
         if sort_id not in result:
-            result[sort_id] = category_place(world, sort_id)
-            if sort_id not in CATEGORY_PLACES:
+            result[sort_id] = category_screen(world, sort_id)
+            if sort_id not in CATEGORY_SCREENS:
                 log(f"WARNING: no place chosen for category {sort_id}")
     log(f"category artwork: {sum(1 for a in result.values() if a.get('artRatio'))} talent backgrounds, "
-        f"{sum(1 for a in result.values() if a and not a.get('artRatio'))} chosen places")
+        f"{sum(1 for a in result.values() if a and not a.get('artRatio'))} chosen loading screens")
     return result
 
 
