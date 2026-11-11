@@ -36,9 +36,30 @@ end
 -- List items: chains (expandable) and quests
 -------------------------------------------------------------------------------
 
+-- Prefix ending with a colon that most titles of a list share, such as the "Craftsman's
+-- Writ:" of the crafting orders: the rows then show what tells the quests apart.
+local function sharedPrefix(chains)
+    local counts, named = {}, 0
+    for _, chain in ipairs(chains) do
+        for _, questID in ipairs(chain) do
+            local name = ns.Names.Quest(questID)
+            if name then
+                named = named + 1
+                local prefix = name:match("^(.-%s?:%s+)%S")
+                if prefix then counts[prefix] = (counts[prefix] or 0) + 1 end
+            end
+        end
+    end
+    for prefix, count in pairs(counts) do
+        if count >= 3 and count * 2 >= named then return prefix end
+    end
+    return nil
+end
+
 -- Turns chains into list items for a view. `expanded[rootID]` opens a chain.
 function QuestWidgets.BuildItems(chains, view, expanded, query)
     local items = {}
+    local prefix = sharedPrefix(chains)
     for _, chain in ipairs(chains) do
         local summary = ns.Quests:ChainSummary(chain, view)
         local visible = summary.quests
@@ -50,19 +71,25 @@ function QuestWidgets.BuildItems(chains, view, expanded, query)
             visible = matching
         end
         if #visible == 1 then
-            items[#items + 1] = { kind = "quest", id = visible[1] }
+            items[#items + 1] = { kind = "quest", id = visible[1], prefix = prefix }
         elseif #visible > 1 then
             local root = visible[1]
             local open = expanded[root] or (query and query ~= "")
-            items[#items + 1] = { kind = "chain", id = root, summary = summary, open = open }
+            items[#items + 1] = { kind = "chain", id = root, summary = summary, open = open, prefix = prefix }
             if open then
                 for _, questID in ipairs(visible) do
-                    items[#items + 1] = { kind = "quest", id = questID, indent = true }
+                    items[#items + 1] = { kind = "quest", id = questID, indent = true, prefix = prefix }
                 end
             end
         end
     end
     return items
+end
+
+local function rowName(item)
+    local name = questName(item.id)
+    if item.prefix and name:sub(1, #item.prefix) == item.prefix then return name:sub(#item.prefix + 1) end
+    return name
 end
 
 -- Builds the widgets of one list row.
@@ -95,7 +122,7 @@ function QuestWidgets.FillRow(row, item, view, selected)
     if isChain then
         local summary = item.summary
         row.expand:SetExpanded(item.open)
-        row.name:SetText(questName(item.id))
+        row.name:SetText(rowName(item))
         local complete = summary.total > 0 and summary.done >= summary.total
         row.name:SetTextColor(Theme.Unpack(complete and C.green or C.gold))
         row.level:SetText(QuestWidgets.LevelText(summary.low, summary.high))
@@ -109,7 +136,7 @@ function QuestWidgets.FillRow(row, item, view, selected)
 
     local quest = ns.Data.Quests[item.id]
     local status = ns.Quests:Status(item.id, view)
-    row.name:SetText(questName(item.id))
+    row.name:SetText(rowName(item))
     row.name:SetTextColor(Theme.Unpack(QuestWidgets.STATUS_COLORS[status] or C.text))
     row.level:SetText(QuestWidgets.LevelText(quest[Q.LEVEL]))
     local xp = quest[Q.XP]
