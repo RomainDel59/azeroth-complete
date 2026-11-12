@@ -47,6 +47,7 @@ function Database:Initialize()
     db.settings = db.settings or {}
     copyDefaults(db.settings, DEFAULT_SETTINGS)
     db.characters = db.characters or {}
+    db.ignoredQuests = db.ignoredQuests or {} -- [questID] = true, for the account view
     db.cache = db.cache or {}
 
     -- Text caches depend on the client language and build: a new build may rename things.
@@ -99,12 +100,19 @@ function Database:TouchCharacter()
     record.recipes = record.recipes or {}
     record.professions = record.professions or {}
     record.bosses = record.bosses or {}
+    -- [questID] = true (ignored) or false (not ignored); absent, the account's choice applies.
+    record.ignored = record.ignored or {}
     self.db.characters[player.key] = record
     self.character = record
 end
 
 function Database:Character()
     return self.character
+end
+
+-- Quests ignored for the account: [questID] = true.
+function Database:IgnoredQuests()
+    return self.db.ignoredQuests
 end
 
 -- Iterates over the records of every known character.

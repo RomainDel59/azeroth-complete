@@ -28,6 +28,13 @@ in the language of the player's client.
 - **Within reach**: the character view keeps only what the character can do (its race, its
   class and the professions it has learned), with the counts to match; a switch shows
   everything.
+- **Ignored quests**: a quest that cannot or need not be done (a Collector's Edition gift, a
+  missed event) can be ignored from its details, which takes it out of the counts and the
+  completion percentages; a quest already turned in still counts as done. An ignored quest
+  is hidden while the view keeps what is within the character's reach; switch the display
+  to everything to see it, greyed, and stop ignoring it. The "to do" filter leaves it out in
+  both cases. The account view sets the account's choice; a character follows it unless it
+  made its own.
 - **One layout for every tab**: the groups on the left, the selected group and item in the
   middle, the items of the group on the right, with the same search and the same filter
   (all, to do, done) on every list.

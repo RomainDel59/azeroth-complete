@@ -16,6 +16,7 @@ QuestWidgets.STATUS_COLORS = {
     [Status.AVAILABLE] = C.text,
     [Status.LOCKED] = C.gray,
     [Status.REPEATABLE] = C.blue,
+    [Status.IGNORED] = C.gray,
 }
 
 local function questName(questID)
@@ -67,7 +68,11 @@ function QuestWidgets.BuildItems(chains, view, expanded, query, filter)
         if filter then
             local kept = {}
             for _, questID in ipairs(visible) do
-                if filter:Keeps(ns.Quests:Status(questID, view) == Status.DONE) then kept[#kept + 1] = questID end
+                local status = ns.Quests:Status(questID, view)
+                -- An ignored quest is not to be done: "to do" leaves it out.
+                if filter:Keeps(status == Status.DONE) and not (filter.value == "todo" and status == Status.IGNORED) then
+                    kept[#kept + 1] = questID
+                end
             end
             visible = kept
         end
@@ -274,6 +279,19 @@ function QuestWidgets.ShowDetails(panel, questID, view)
     if ns.Quests.HasFlag(flags, Flag.EVENT) then notes[#notes + 1] = L.FLAG_EVENT end
     if ns.Quests.HasFlag(flags, Flag.BREADCRUMB) then notes[#notes + 1] = L.FLAG_BREADCRUMB end
     if #notes > 0 then panel:Line(table.concat(notes, "  ·  "), C.blue, 11) end
+
+    -- Ignoring a quest takes it out of the counts of the current view, until it is undone.
+    if status ~= Status.DONE then
+        local ignored, source = ns.Quests:IgnoreState(questID, view)
+        if ignored then
+            panel:Line(source == "account" and L.IGNORED_FOR_ACCOUNT or L.IGNORED_FOR_CHARACTER, C.gray, 11)
+        end
+        local account = view.tracking == ns.Const.Tracking.ACCOUNT
+        local label = ignored and L.UNIGNORE_QUEST or L.IGNORE_QUEST
+        panel:Button(string.format("%s (%s)", label, account and L.TRACKING_ACCOUNT or L.TRACKING_CHARACTER), function()
+            ns.Quests:SetIgnored(questID, view, not ignored)
+        end)
+    end
     panel:Space(6)
 
     local prerequisites = {}

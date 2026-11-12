@@ -233,6 +233,35 @@ ns.Names.Quest(93928)
 Stub.Advance(2)
 check(ns.Names.Quest(93928) == "Quest 93928", "an unanswered quest title is asked again later")
 
+-- Ignored quests: out of the counts of the view; a character follows the account unless it
+-- made its own choice.
+local characterView = ns.MainFrame:View()
+local accountView = { tracking = "account", faction = characterView.faction, possible = true, key = "test:account" }
+local welcome = 5805
+local elwynnZone = findGroup("ek", 12)
+local function total(view)
+    return ns.Quests:Summary("test:ignore:" .. tostring(ns.Quests:Revision()) .. view.key, elwynnZone.chains, view).total
+end
+local before = total(characterView)
+ns.Quests:SetIgnored(welcome, characterView, true)
+check(ns.Quests:Status(welcome, characterView) == ns.Const.Status.IGNORED and total(characterView) == before - 1,
+    "a quest ignored for the character leaves its counts")
+check(not ns.Quests:IsVisible(welcome, characterView), "an ignored quest is hidden within reach")
+check(not ns.Quests:IsIgnored(welcome, accountView), "a quest ignored for a character stays counted for the account")
+ns.Quests:SetIgnored(welcome, characterView, false)
+check(ns.Database:Character().ignored[welcome] == nil, "a choice equal to the account's is dropped")
+ns.Quests:SetIgnored(welcome, accountView, true)
+local ignored, source = ns.Quests:IgnoreState(welcome, characterView)
+check(ignored and source == "account", "a character without a choice follows the account")
+ns.Quests:SetIgnored(welcome, characterView, false)
+check(not ns.Quests:IsIgnored(welcome, characterView) and ns.Quests:IsIgnored(welcome, accountView),
+    "a character's own choice overrides the account's")
+ns.Quests:SetIgnored(welcome, accountView, false)
+ignored, source = ns.Quests:IgnoreState(welcome, characterView)
+check(not ignored and source == "character", "a character keeps its own choice when the account changes")
+ns.Database:Character().ignored[welcome] = nil
+Stub.Advance(1)
+
 -- Every tab has content
 local expectations = {
     professions = "recipes", dungeons = "entries", raids = "entries",

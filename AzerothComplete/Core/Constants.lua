@@ -66,6 +66,7 @@ ns.Const = {
         AVAILABLE = "available",
         LOCKED = "locked",
         REPEATABLE = "repeatable",
+        IGNORED = "ignored", -- set aside by the player: out of the counts
     },
 
     Tracking = { ACCOUNT = "account", CHARACTER = "character" },

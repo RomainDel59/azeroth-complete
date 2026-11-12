@@ -125,12 +125,48 @@ function Quests.RequiredProfession(row)
     return skill and ns.Data.Professions[skill] and skill or nil
 end
 
+-------------------------------------------------------------------------------
+-- Ignored quests
+-------------------------------------------------------------------------------
+
+-- A quest the player cannot or does not want to do is ignored: it leaves the counts. The
+-- account view uses the account's choice; a character uses its own choice when it made
+-- one, the account's otherwise. Returns the state and where it comes from ("character" or
+-- "account").
+function Quests:IgnoreState(questID, view)
+    local account = ns.Database:IgnoredQuests()[questID] == true
+    if view.tracking == Tracking.ACCOUNT then return account, "account" end
+    local own = ns.Database:Character().ignored[questID]
+    if own ~= nil then return own, "character" end
+    return account, "account"
+end
+
+function Quests:IsIgnored(questID, view)
+    return (self:IgnoreState(questID, view))
+end
+
+-- Sets the choice of the view's level. A character's choice equal to the account's is
+-- dropped, so that the character follows the account again.
+function Quests:SetIgnored(questID, view, ignored)
+    local accountSet = ns.Database:IgnoredQuests()
+    if view.tracking == Tracking.ACCOUNT then
+        accountSet[questID] = ignored or nil
+    else
+        local own = ns.Database:Character().ignored
+        if ignored == (accountSet[questID] == true) then own[questID] = nil else own[questID] = ignored end
+    end
+    ns.Log:Info("Quest %d %s for the %s", questID, ignored and "ignored" or "no longer ignored",
+        view.tracking == Tracking.ACCOUNT and "account" or "character")
+    changed()
+end
+
 function Quests:IsVisible(questID, view)
     local row = ns.Data.Quests[questID]
     if not row then return false end
     local races = row[Q.RACES]
     if self:UsesCharacterFilter(view) then
         local profession = Quests.RequiredProfession(row)
+        if self:IsIgnored(questID, view) and not completedSet(view)[questID] then return false end
         return ns.Player:CanRace(races) and ns.Player:CanClass(row[Q.CLASSES])
             and (not profession or ns.Professions:HasLearned(profession))
     end
@@ -185,6 +221,7 @@ function Quests:Status(questID, view)
     end
     local target = row[Q.BREADCRUMB_FOR]
     if target and completed[target] then return Status.DONE, "breadcrumb" end
+    if self:IsIgnored(questID, view) then return Status.IGNORED end
     if ns.Compat.IsOnQuest(questID) then return Status.ACTIVE end
     if not allDone(row[Q.PRE_ALL], completed) or not anyDone(row[Q.PRE_ANY], completed) then
         return Status.LOCKED, "prerequisite"
@@ -215,9 +252,10 @@ function Quests:ChainSummary(chain, view)
                 low = math.min(low or level, level)
                 high = math.max(high or level, level)
             end
-            if Quests.FlagsExclude(row[Q.FLAGS], NOT_COUNTED) then
+            local status = self:Status(questID, view)
+            if Quests.FlagsExclude(row[Q.FLAGS], NOT_COUNTED) and status ~= Status.IGNORED then
                 total = total + 1
-                if self:Status(questID, view) == Status.DONE then done = done + 1 end
+                if status == Status.DONE then done = done + 1 end
             end
         end
     end
