@@ -1,0 +1,57 @@
+## Interface: 16001
+## Title: Azeroth Complete
+## Title-frFR: Azeroth au complet
+## Notes: Completionist tracker for WoW Forever: quests by zone, profession catalogues, dungeons, raids, Legacy challenges and collections.
+## Notes-frFR: Suivi de complétion pour WoW Forever : quêtes par zone, catalogues des métiers, donjons, raids, défis d'héritage et collections.
+## Author: RomainDel
+## Version: @project-version@
+## X-License: GPL-3.0-or-later
+## IconTexture: Interface\AddOns\AzerothComplete\Media\Emblem
+## SavedVariables: AzerothCompleteDB
+## AddonCompartmentFunc: AzerothComplete_OnAddonCompartmentClick
+## AddonCompartmentFuncOnEnter: AzerothComplete_OnAddonCompartmentEnter
+## AddonCompartmentFuncOnLeave: AzerothComplete_OnAddonCompartmentLeave
+
+Core\Init.lua
+Core\Log.lua
+Core\Compat.lua
+Core\Constants.lua
+Locales\Locale.lua
+Locales\enUS.lua
+Locales\frFR.lua
+
+Data\Constants.lua
+Data\Quests.lua
+Data\Zones.lua
+Data\Entities.lua
+Data\Professions.lua
+Data\Instances.lua
+Data\Collections.lua
+Data\Artwork.lua
+Data\Strings.enUS.lua
+Data\Strings.frFR.lua
+
+Core\Database.lua
+Core\Player.lua
+Core\Names.lua
+Core\Diagnostics.lua
+
+Modules\Quests.lua
+Modules\Professions.lua
+Modules\Instances.lua
+Modules\Collections.lua
+Modules\Achievements.lua
+
+UI\Theme.lua
+UI\Widgets.lua
+UI\QuestWidgets.lua
+UI\MainFrame.lua
+UI\Views\Layout.lua
+UI\Views\QuestsView.lua
+UI\Views\ProfessionsView.lua
+UI\Views\InstancesView.lua
+UI\Views\CollectionsView.lua
+UI\Views\AchievementsView.lua
+UI\MinimapButton.lua
+
+Core\Slash.lua
