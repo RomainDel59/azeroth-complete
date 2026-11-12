@@ -15,12 +15,15 @@ in the language of the player's client.
 
 - **Quests**: zones grouped by continent, with their completion; quests grouped into chains
   that unfold; for each quest its status, level, prerequisites, follow-ups, giver and turn-in
-  NPC (with a map waypoint), experience and reputation rewards.
+  NPC (with a map waypoint), experience and reputation rewards. A quest is shown locked, with
+  the reason, while the character's level, its prerequisites or the rank of the profession it
+  needs fall short.
 - **Professions**: the complete catalogue of each profession for the Forever client, the
   recipes already learned, the reagents, and how to obtain each recipe (trainer, vendor,
   drop, quest).
 - **Dungeons and raids**: bosses defeated and instance quests completed.
-- **Legacy challenges**, read from the game.
+- **Legacy challenges**, read from the game; within reach, the categories of another class
+  or of a profession the character has not learned are left out.
 - **Collections** (mounts, pets, toys, appearance sets, titles): what is owned and what is
   missing, with the source of each item.
 - **Account or character tracking**: the account view merges the progress of every character
@@ -37,7 +40,9 @@ in the language of the player's client.
   made its own.
 - **One layout for every tab**: the groups on the left, the selected group and item in the
   middle, the items of the group on the right, with the same search and the same filter
-  (all, to do, done) on every list.
+  (all, to do, done) on every list. Lists are sorted by level, lowest first, then
+  alphabetically; the challenges of a category and the bosses of an instance keep the order
+  of the game.
 
 ## Installation
 
@@ -51,7 +56,8 @@ Open the window with the minimap button, the addon compartment or `/azc`.
 
 | Command | Effect |
 | --- | --- |
-| `/azc` | open or close the window |
+| `/azc` or `/azc show` | open or close the window |
+| `/azc help` | list the commands |
 | `/azc diag` | list which game features the client provides |
 | `/azc log [count]` | print the last log entries |
 | `/azc debug` | toggle detailed logging |
