@@ -6,7 +6,7 @@
 ## Author: RomainDel
 ## Version: @project-version@
 ## X-License: GPL-3.0-or-later
-## IconTexture: Interface\AddOns\AzerothComplete\Media\Emblem
+## IconTexture: Interface\Icons\INV_Misc_Map02
 ## SavedVariables: AzerothCompleteDB
 ## AddonCompartmentFunc: AzerothComplete_OnAddonCompartmentClick
 ## AddonCompartmentFuncOnEnter: AzerothComplete_OnAddonCompartmentEnter
@@ -41,6 +41,7 @@ Modules\Professions.lua
 Modules\Instances.lua
 Modules\Collections.lua
 Modules\Achievements.lua
+Modules\Progress.lua
 
 UI\Theme.lua
 UI\Widgets.lua

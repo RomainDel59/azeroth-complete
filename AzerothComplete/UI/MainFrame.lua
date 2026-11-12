@@ -41,14 +41,31 @@ end
 -- Construction
 -------------------------------------------------------------------------------
 
+-- Tooltip of a progress: the percentage, then what it counts.
+local function progressLine(counts)
+    if counts.total == 0 then return L.UNAVAILABLE end
+    return string.format(L.PROGRESS_TOOLTIP, math.floor(counts.done / counts.total * 100), counts.done, counts.total)
+end
+
 local function buildHeader(frame)
-    local emblem = CreateFrame("Frame", nil, frame)
-    emblem:SetSize(96, 96)
-    emblem:SetPoint("TOPLEFT", 18, -10)
-    local art = emblem:CreateTexture(nil, "ARTWORK")
-    art:SetAllPoints()
-    art:SetTexture(Theme.icons.emblem)
-    frame.emblem = emblem
+    -- Overall progress: every tab weighs the same.
+    local ring = UI.ProgressRing(frame, 96)
+    ring:SetPoint("TOPLEFT", 18, -10)
+    ring:EnableMouse(true)
+    ring:SetScript("OnEnter", function(self)
+        GameTooltip:SetOwner(self, "ANCHOR_RIGHT")
+        GameTooltip:SetText(L.OVERALL_PROGRESS, 1, 0.82, 0)
+        local progress = MainFrame.progress
+        if progress then
+            for _, tab in ipairs(TABS) do
+                GameTooltip:AddDoubleLine(ns:GameLabel(tab.global, tab.label), progressLine(progress[tab.id]), 1, 1, 1, 1, 1, 1)
+            end
+        end
+        GameTooltip:AddLine(L.OVERALL_PROGRESS_NOTE, 0.6, 0.6, 0.6, true)
+        GameTooltip:Show()
+    end)
+    ring:SetScript("OnLeave", function() GameTooltip:Hide() end)
+    frame.ring = ring
 
     local title = UI.Text(frame, 30, C.gold, "body", "CENTER")
     title:SetPoint("TOP", 0, -22)
@@ -86,6 +103,19 @@ local function buildTabs(frame)
             MainFrame:SelectTab(tab.id)
         end)
         button:SetPoint("TOPLEFT", left + (index - 1) * (width + spacing), -92)
+        -- Progress of the tab, a thin bar along its bottom edge, its figures in the tooltip.
+        button.progress = UI.ProgressBar(button, 3)
+        button.progress:SetPoint("BOTTOMLEFT", 1, 1)
+        button.progress:SetPoint("BOTTOMRIGHT", -1, 1)
+        button:SetScript("OnEnter", function(self)
+            local progress = MainFrame.progress
+            if not progress then return end
+            GameTooltip:SetOwner(self, "ANCHOR_BOTTOM")
+            GameTooltip:SetText(self.label:GetText() or "", 1, 0.82, 0)
+            GameTooltip:AddLine(progressLine(progress[tab.id]), 1, 1, 1)
+            GameTooltip:Show()
+        end)
+        button:SetScript("OnLeave", function() GameTooltip:Hide() end)
         button.tab = tab
         frame.tabs[tab.id] = button
     end
@@ -236,6 +266,35 @@ function MainFrame:Refresh()
     local view = self.activeView
     if view and view.Refresh then
         ns:SafeCall("view " .. tostring(self.activeTab) .. " refresh", view.Refresh, view)
+    end
+    self:ScheduleProgress()
+end
+
+-- The gauges count every tab: they are drawn on the next frame, after the view, and only
+-- while the window is shown.
+function MainFrame:ScheduleProgress()
+    if self.progressScheduled then return end
+    self.progressScheduled = true
+    C_Timer.After(0, function()
+        self.progressScheduled = nil
+        ns:SafeCall("progress", self.RefreshProgress, self)
+    end)
+end
+
+function MainFrame:RefreshProgress()
+    local frame = self.frame
+    if not frame or not frame:IsShown() then return end
+    local progress = ns.Progress:Compute(self:View())
+    self.progress = progress
+    for _, tab in ipairs(TABS) do
+        local counts = progress[tab.id]
+        frame.tabs[tab.id].progress:SetProgress(counts.done, counts.total)
+    end
+    local overall = progress.overall
+    if overall then
+        frame.ring:SetProgress(math.floor(overall * 1000), 1000, overall >= 1 and L.COMPLETE or L.OVERALL)
+    else
+        frame.ring:SetProgress(0, 0, "")
     end
 end
 

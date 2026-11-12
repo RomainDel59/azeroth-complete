@@ -276,6 +276,26 @@ for tab, listKey in pairs(expectations) do
     check(shown > 0, "tab %s draws rows", tab)
 end
 
+-- Progress gauges: one bar per tab, the ring the mean of the tabs that count something.
+Stub.Advance(0.1)
+local progress = ns.MainFrame.progress
+check(progress ~= nil, "the gauges are drawn once the window is shown")
+if progress then
+    check(progress.quests.total > 0 and progress.professions.total > 0 and progress.dungeons.total > 0,
+        "the quests, professions and dungeons gauges count entries")
+    local sum, counted = 0, 0
+    for _, tab in ipairs(ns.Progress.TABS) do
+        local counts = progress[tab]
+        if counts.total > 0 then sum, counted = sum + counts.done / counts.total, counted + 1 end
+    end
+    check(math.abs(progress.overall - sum / counted) < 1e-9, "the overall progress is the mean of the tabs")
+    check(frame.ring.percent:GetText() == string.format("%d%%", math.floor(progress.overall * 100)),
+        "the ring shows the overall percentage")
+    check(frame.tabs.quests.progress.fraction ~= nil, "the tab bars are filled")
+    frame.tabs.quests:GetScript("OnEnter")(frame.tabs.quests)
+    frame.ring:GetScript("OnEnter")(frame.ring)
+end
+
 -- Quest details of an active quest, with objectives and a waypoint button
 ns.MainFrame:SelectTab("quests")
 questsView = ns.MainFrame.activeView

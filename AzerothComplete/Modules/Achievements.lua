@@ -76,6 +76,26 @@ end
 
 ns:RegisterMessage("AC_PROGRESS_CHANGED", function() summaries = {} end)
 
+-- Categories out of the character's reach, in the character filter: those named after
+-- another class, or after a profession the character has not learned. [categoryID] = true.
+function Achievements:OutOfReach(categories, view)
+    local hidden = {}
+    if not ns.Quests:UsesCharacterFilter(view) then return hidden end
+    local byName = {}
+    for classID in pairs(ns.Data.Artwork.classes) do
+        local name = ns.Compat.GetClassName(classID)
+        if name then byName[name] = classID ~= ns.Player.classID end
+    end
+    for skillLine in pairs(ns.Data.Professions) do
+        local name = ns.Names.SkillLine(skillLine)
+        if name then byName[name] = not ns.Professions:HasLearned(skillLine) end
+    end
+    for _, category in ipairs(categories) do
+        if byName[category.name] then hidden[category.id] = true end
+    end
+    return hidden
+end
+
 function Achievements:Invalidate()
     self.categories = nil
     ns:SendMessageDelayed("AC_PROGRESS_CHANGED", 0.5)

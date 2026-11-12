@@ -9,8 +9,6 @@ The addon is localized: English and French today, and every text about game cont
 (quest titles, item, spell, zone and faction names...) comes from the game client itself,
 in the language of the player's client.
 
-![Emblem](art/emblem.png)
-
 ## Features
 
 - **Quests**: zones grouped by continent, with their completion; quests grouped into chains
@@ -38,6 +36,10 @@ in the language of the player's client.
   to everything to see it, greyed, and stop ignoring it. The "to do" filter leaves it out in
   both cases. The account view sets the account's choice; a character follows it unless it
   made its own.
+- **Progress gauges**: a thin bar under each tab shows its progress, with its figures in the
+  tooltip, and the ring at the top left the overall progress, the mean of the tabs, so that
+  each tab weighs the same whatever its number of entries. They follow the view: tracking,
+  faction and reach.
 - **One layout for every tab**: the groups on the left, the selected group and item in the
   middle, the items of the group on the right, with the same search and the same filter
   (all, to do, done) on every list. Lists are sorted by level, lowest first, then
@@ -134,8 +136,6 @@ tools/install.sh "D:/Games/World of Warcraft/_forever_"
 
 Lua changes are picked up by `/reload`; a change to the TOC or a new file requires restarting
 the game.
-
-The emblem texture is produced from `art/emblem.png` by `python -I tools/make_emblem.py`.
 
 ## Releases
 

@@ -52,7 +52,7 @@ Theme.fonts = {
 }
 
 Theme.icons = {
-    emblem = "Interface\\AddOns\\AzerothComplete\\Media\\Emblem",
+    addon = "Interface\\Icons\\INV_Misc_Map02",
     quests = "Interface\\Icons\\INV_Misc_Note_01",
     professions = "Interface\\Icons\\Trade_BlackSmithing",
     toys = "Interface\\Icons\\INV_Misc_Gift_01",

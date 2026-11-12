@@ -2,8 +2,7 @@
 
 World of Warcraft addon for the WoW Forever client (interface 16001): a completionist tracker
 for quests, professions, dungeons, raids, Legacy challenges and collections. The addon lives in
-`AzerothComplete/`; `tools/` generates its data, `tests/` checks it offline, and `art/` holds
-the source artwork.
+`AzerothComplete/`; `tools/` generates its data and `tests/` checks it offline.
 
 ## Language
 
